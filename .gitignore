@@ -1,0 +1,15 @@
+node_modules/
+/bin/
+/dist/
+/outputs/
+*.ipa
+*.staging
+*.log
+.env
+.env.*
+apple-session.encrypted
+machine-guid.txt
+downloads.json
+download-settings.json
+.DS_Store
+Thumbs.db

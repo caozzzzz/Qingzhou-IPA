@@ -1,0 +1,66 @@
+{
+  "name": "qingzhou-ipa",
+  "version": "0.8.1",
+  "description": "轻舟 IPA App Store 搜索与版本下载器",
+  "author": "Qingzhou",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "npm run build:bridge && electron-builder --win portable --x64",
+    "test": "node --test tests/*.test.js",
+    "build:bridge": "cd authbridge && go build -trimpath -ldflags=\"-s -w\" -o ../bin/qingzhou-auth.exe ."
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "local.qingzhou.ipa.demo",
+    "productName": "轻舟 IPA",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "glass.css",
+      "icon.ico",
+      "auth-ui.js",
+      "auth-service.js",
+      "preload.js",
+      "THIRD-PARTY-NOTICES.txt",
+      "renderer-live.js",
+      "app-service.js",
+      "version-sources.js",
+      "regions.js",
+      "brandmark.svg"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "icon.ico",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "Qingzhou-IPA-0.8.1-Windows-x64.exe"
+    },
+    "compression": "normal",
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "authbridge",
+        "filter": [
+          "qingzhou-auth.exe"
+        ]
+      },
+      {
+        "from": "third-party-licenses",
+        "to": "third-party-licenses"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Oczzzz/Qingzhou-IPA.git"
+  }
+}

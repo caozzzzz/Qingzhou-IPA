@@ -372,7 +372,7 @@ func (t *appstore) parseLoginResponse(res *http.Result[loginResult], attempt int
 		err = fmt.Errorf("apple returned no usable authentication response (HTTP %d): missing account credentials or unexpected status; try again later or from another network", res.StatusCode)
 	}
 
-	return retry, redirect, err
+	return retry, redirect, loginFailure(err, res.StatusCode, res.Data.FailureType, res.Data.CustomerMessage)
 }
 
 func resolveAuthenticationRedirect(endpoint, location string) (string, error) {

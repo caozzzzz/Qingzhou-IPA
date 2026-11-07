@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/majd/ipatool/v2/pkg/appstore"
+	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"github.com/majd/ipatool/v2/pkg/util/operatingsystem"
 )
 
@@ -179,8 +180,37 @@ func public(acc appstore.Account) *publicAccount {
 
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
+	var responseError *storehttp.UnexpectedResponseError
+	if errors.As(err, &responseError) && responseError.StatusCode >= 100 && responseError.StatusCode <= 599 {
+		status := responseError.StatusCode
+		switch status {
+		case 401:
+			return "auth_http", "Apple 未接受登录请求（HTTP 401）。请核对密码；若开启双重认证，可展开手动验证码入口。"
+		case 403, 404:
+			return "auth_http", fmt.Sprintf("Apple 登录接口未返回可用认证数据（HTTP %d）。这不等于密码错误；请记录此错误码，并对照登录环境检查结果。", status)
+		case 429:
+			return "auth_rate", "Apple 暂时限制了登录请求（HTTP 429），请稍后再试，避免连续尝试。"
+		default:
+			return "auth_http", fmt.Sprintf("Apple 登录接口返回异常（HTTP %d），请记录此错误码。", status)
+		}
+	}
+	var failure *appstore.AuthenticationFailure
+	if errors.As(err, &failure) {
+		if failure.Disabled {
+			return "locked", "Apple 返回账户停用提示，请先在官方 App Store 检查账户。"
+		}
+		if failure.Verification {
+			return "verification", "Apple 未接受双重验证码，请使用受信任设备上的新六位验证码重试。"
+		}
+		if failure.FailureType == appstore.FailureTypeInvalidCredentials {
+			return "credentials", "Apple 未接受登录凭据（代码 -5000）。请使用 Apple 账户密码；若已开启双重认证，可展开手动验证码入口。"
+		}
+		return "auth_response", fmt.Sprintf("Apple 未完成登录（HTTP %d，Apple 代码 %s）。请记录此错误码及登录环境检查结果。", failure.StatusCode, failure.FailureType)
+	}
 	s := strings.ToLower(err.Error())
 	switch {
+	case strings.Contains(s, "failed to get storefront header"), strings.Contains(s, "failed to get pod header"):
+		return "auth_headers", "Apple 响应缺少商店信息，未保存登录状态（HEADERS）。"
 	case strings.Contains(s, "cache apple sap"), strings.Contains(s, "find user cache"):
 		return "auth_cache", "无法保存认证组件，请检查应用缓存目录和可用空间（CACHE）。"
 	case strings.Contains(s, "load apple sap assets"), strings.Contains(s, "download apple sap assets"), strings.Contains(s, "open apple software update"):

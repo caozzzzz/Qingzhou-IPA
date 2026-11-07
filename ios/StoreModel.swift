@@ -6,6 +6,7 @@ import CryptoKit
     @Published var accountBusy = false
     @Published var needsCode = false
     @Published var accountMessage = ""
+    @Published var environmentMessage = ""
     @Published var searchMessage = ""
     @Published var searching = false
     @Published var apps: [CatalogApp] = []
@@ -50,10 +51,11 @@ import CryptoKit
         if result["ok"] as? Bool == true, let user = result["account"] as? JSON { account = Account(user); session = stored; accountMessage = "已恢复登录状态，下载时会由 Apple 验证。" }
         else { SessionKeychain.clear(); accountMessage = "无法恢复会话，请重新登录。" }
     }
-    func login(email: String, password: String, remember: Bool) async {
+    func login(email: String, password: String, remember: Bool, code: String = "") async {
         guard !accountBusy, account == nil, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty else { return }
+        guard code.isEmpty || code.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else { accountMessage = "手动验证码必须是六位数字。"; return }
         pending = nil; needsCode = false
-        await authenticate(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password, remember: remember, code: "")
+        await authenticate(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password, remember: remember, code: code)
     }
     func submitCode(_ code: String) async {
         guard !accountBusy, let saved = pending else { return }
@@ -82,11 +84,13 @@ import CryptoKit
     }
     func checkEnvironment() async {
         guard !accountBusy else { return }
+        let previousLoginMessage = accountMessage
         accountBusy = true; accountMessage = "正在检查认证配置、组件与本机解释器，首次检查可能需要几分钟…"
         let generation = authenticationGeneration
         let result = await auth.request(base("checkAuth"))
         guard generation == authenticationGeneration else { return }; accountBusy = false
-        accountMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
+        environmentMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
+        accountMessage = previousLoginMessage
     }
     func cancelLogin() { authenticationGeneration = UUID(); pending = nil; needsCode = false; accountBusy = false; auth.cancel() }
     func logout() async {

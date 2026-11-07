@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"github.com/majd/ipatool/v2/pkg/appstore"
+	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"strings"
 	"testing"
 )
@@ -19,5 +21,19 @@ func TestAuthenticationEnvironmentErrorsAreClassifiedWithoutDetails(t *testing.T
 		if code != want || strings.Contains(message, "private-") {
 			t.Fatalf("unexpected public error %s: %s", code, message)
 		}
+	}
+}
+
+func TestAuthenticationHTTPDiagnosticsNeverExposeResponseDetails(t *testing.T) {
+	for _, status := range []int{401, 403, 404, 429, 500} {
+		err := &storehttp.UnexpectedResponseError{StatusCode: status, Snippet: "private-password-token", CorrelationID: "private-id"}
+		code, message := authenticationError(err)
+		if code == "apple" || strings.Contains(message, "private-") {
+			t.Fatalf("unsafe or missing HTTP diagnostic: %s", message)
+		}
+	}
+	code, message := authenticationError(&appstore.AuthenticationFailure{StatusCode: 200, FailureType: "-5000"})
+	if code != "credentials" || !strings.Contains(message, "-5000") {
+		t.Fatal("credential code missing")
 	}
 }

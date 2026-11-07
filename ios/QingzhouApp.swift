@@ -190,6 +190,8 @@ struct AccountView: View {
     @State private var password = ""
     @State private var code = ""
     @State private var remember = false
+    @State private var manualVerification = false
+    @State private var manualCode = ""
     var body: some View {
         NavigationView { ZStack { FrostBackground(); ScrollView { VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 10) { Label("免 JIT 运行", systemImage: "iphone").font(.headline); Text("登录认证改为本机解释执行，无需开启 JIT。首次登录可能需要下载认证组件，请保持联网并将应用留在前台。").font(.caption).foregroundColor(.secondary) }.glassCard()
@@ -208,15 +210,25 @@ struct AccountView: View {
                     Text("Apple 账户").font(.headline)
                     TextField("账号邮箱", text: $email).keyboardType(.emailAddress).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
                     SecureField("密码", text: $password).textContentType(.password).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
+                    DisclosureGroup("手动输入双重验证码", isExpanded: $manualVerification) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("六位验证码", text: $manualCode).keyboardType(.numberPad).textContentType(.oneTimeCode).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
+                            Text("可填写受信任 Apple 设备上取得的新验证码；密码框只填账户密码，不要重复拼接验证码。").font(.caption).foregroundColor(.secondary)
+                        }.padding(.top, 8)
+                    }
                     Toggle("记住登录状态", isOn: $remember)
-                    Button { let value = password; password = ""; Task { await model.login(email: email, password: value, remember: remember) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
+                    Button { let value = password; let verification = manualVerification ? manualCode : ""; password = ""; manualCode = ""; Task { await model.login(email: email, password: value, remember: remember, code: verification) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
                     Button("检查登录环境") { Task { await model.checkEnvironment() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
                     if model.accountBusy { Button("取消登录") { model.cancelLogin() } }
                 }
-                if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary) }
+                if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
+                if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
+                if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.1\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.2.0 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.2.1 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
     }
 }

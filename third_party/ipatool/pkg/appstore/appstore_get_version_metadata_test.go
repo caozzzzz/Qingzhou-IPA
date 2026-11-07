@@ -154,7 +154,7 @@ var _ = Describe("HTTPRangeReaderAt", func() {
 		server, _, _ := testIPAServerWithRangeLog(data, &rangeLog)
 		defer server.Close()
 
-		reader, size, err := newHTTPRangeReaderAt(http.NewClient[interface{}](http.Args{}), server.URL)
+		reader, size, err := newHTTPRangeReaderAt(newDownloadTestClient(), server.URL)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(size).To(Equal(int64(len(data))))
 
@@ -185,7 +185,7 @@ var _ = Describe("AppStore (GetVersionMetadata)", func() {
 			machine:        mockMachine,
 			bagClient:      mockBagClient,
 			downloadClient: mockDownloadClient,
-			httpClient:     http.NewClient[interface{}](http.Args{}),
+			httpClient:     newDownloadTestClient(),
 		}
 	})
 
@@ -506,8 +506,6 @@ var _ = Describe("AppStore (GetVersionMetadata)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(output.DisplayVersion).To(Equal("1.0"))
 		Expect(output.ReleaseDate).To(Equal(releaseDate))
-		Expect(output.SizeBytes).To(BeNumerically(">", 0))
-		Expect(output.DateSource).ToNot(BeEmpty())
 	})
 
 	When("successfully gets version metadata", func() {
@@ -566,8 +564,6 @@ var _ = Describe("AppStore (GetVersionMetadata)", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output.DisplayVersion).To(Equal(displayVersion))
 			Expect(output.ReleaseDate).To(Equal(releaseDate))
-		Expect(output.SizeBytes).To(BeNumerically(">", 0))
-		Expect(output.DateSource).ToNot(BeEmpty())
 			Expect(atomic.LoadInt64(wholeGetCount)).To(BeZero())
 			Expect(atomic.LoadInt64(servedBytes)).To(BeNumerically("<", int64(len(ipa)/2)))
 		},

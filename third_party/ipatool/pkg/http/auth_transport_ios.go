@@ -17,7 +17,7 @@ import (
 
 type nativeAuthTransport struct{ fallback http.RoundTripper }
 
-func authenticationTransport(fallback http.RoundTripper) http.RoundTripper {
+func AuthenticationRoundTripper(fallback http.RoundTripper) http.RoundTripper {
 	return nativeAuthTransport{fallback: fallback}
 }
 

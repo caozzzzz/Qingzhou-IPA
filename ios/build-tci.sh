@@ -15,7 +15,7 @@ fi
 if [[ ! -f "$BUILD/unicorn-host/libunicorn.2.dylib" ]]; then
   ARCHFLAGS='-arch arm64' cmake -S "$SOURCE" -B "$BUILD/unicorn-host" \
     -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=ON -DUNICORN_ARCH=x86 -DUNICORN_ENABLE_TCI=ON \
+    -DBUILD_SHARED_LIBS=ON -DUNICORN_ARCH=arm64 -DUNICORN_ENABLE_TCI=ON \
     -DUNICORN_BUILD_TESTS=OFF -DUNICORN_INSTALL=OFF
   cmake --build "$BUILD/unicorn-host" --parallel "$(sysctl -n hw.ncpu)"
 fi
@@ -27,7 +27,7 @@ if [[ ! -f "$BUILD/unicorn-tci/libunicorn.a" ]]; then
     -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT="$SDKROOT" \
     -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
     -DCMAKE_C_FLAGS='-target arm64-apple-ios16.0' -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=OFF -DUNICORN_ARCH=x86 -DUNICORN_ENABLE_TCI=ON \
+    -DBUILD_SHARED_LIBS=OFF -DUNICORN_ARCH=arm64 -DUNICORN_ENABLE_TCI=ON \
     -DUNICORN_BUILD_TESTS=OFF -DUNICORN_INSTALL=OFF
   cmake --build "$BUILD/unicorn-tci" --parallel "$(sysctl -n hw.ncpu)"
 fi

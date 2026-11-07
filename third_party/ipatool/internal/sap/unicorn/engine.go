@@ -12,22 +12,33 @@ import (
 	"github.com/ebitengine/purego"
 )
 
-const queryTimeout = 4
+const (
+	queryTimeout     = 4
+	controlCPUModel  = uint32(7 | 1<<26 | 1<<30)
+	arm64CPUModelMax = uint32(3)
+)
 
 const (
-	archX86 = 4
-	mode64  = 8
-	protAll = 7
+	archARM64 = 2
+	modeARM   = 0
+	protAll   = 7
 
-	RegRAX = 35
-	RegRCX = 38
-	RegRDI = 39
-	RegRDX = 40
-	RegRIP = 41
-	RegRSI = 43
-	RegRSP = 44
-	RegR8  = 106
-	RegR9  = 107
+	RegX29 = 1
+	RegLR  = 2
+	RegSP  = 4
+	RegX0  = 199
+	RegX1  = 200
+	RegX2  = 201
+	RegX3  = 202
+	RegX4  = 203
+	RegX5  = 204
+	RegX6  = 205
+	RegX7  = 206
+	RegX14 = 213
+	RegX15 = 214
+	RegX16 = 215
+	RegV0  = 228
+	RegPC  = 260
 )
 
 var (
@@ -55,15 +66,16 @@ type api struct {
 }
 
 type Engine struct {
-	api       api
-	handle    uintptr
-	library   library
-	hooks     hookState
-	stateMu   sync.Mutex
-	active    sync.WaitGroup
-	closing   bool
-	closeDone chan struct{}
-	closeErr  error
+	memoryGuard *memoryGuard
+	api         api
+	handle      uintptr
+	library     library
+	hooks       hookState
+	stateMu     sync.Mutex
+	active      sync.WaitGroup
+	closing     bool
+	closeDone   chan struct{}
+	closeErr    error
 }
 
 func New(ctx context.Context) (*Engine, error) {
@@ -108,10 +120,19 @@ func newEngine(ctx context.Context, loadLibrary func(context.Context) (library, 
 		return nil, fmt.Errorf("unsupported Unicorn API version %d.%d", major, minor)
 	}
 
-	if err := engine.err(engine.api.open(archX86, mode64, &engine.handle)); err != nil {
+	if err := engine.err(engine.api.open(archARM64, modeARM, &engine.handle)); err != nil {
 		_ = library.close()
 
-		return nil, fmt.Errorf("create x86-64 emulator: %w", err)
+		return nil, fmt.Errorf("create arm64 emulator: %w", err)
+	}
+
+	// Select Unicorn's most capable ARM64 model. The compatibility layer handles
+	// modern instructions that this Unicorn build does not implement.
+	if err := engine.err(engine.api.ctl(engine.handle, controlCPUModel, arm64CPUModelMax)); err != nil {
+		_ = engine.api.close(engine.handle)
+		_ = library.close()
+
+		return nil, fmt.Errorf("configure arm64 CPU model: %w", err)
 	}
 
 	if err := configureEngine(engine); err != nil {
@@ -176,6 +197,10 @@ func (e *Engine) MemRead(address, size uint64) ([]byte, error) {
 	}
 	defer done()
 
+	if err := e.checkMemory(address, size); err != nil {
+		return nil, err
+	}
+
 	data := make([]byte, size)
 	if len(data) == 0 {
 		return data, nil
@@ -197,6 +222,10 @@ func (e *Engine) MemReadInto(data []byte, address uint64) error {
 		return nil
 	}
 
+	if err := e.checkMemory(address, uint64(len(data))); err != nil {
+		return err
+	}
+
 	return e.err(e.api.memRead(handle, address, unsafe.Pointer(&data[0]), uint64(len(data))))
 }
 
@@ -209,6 +238,10 @@ func (e *Engine) MemWrite(address uint64, data []byte) error {
 
 	if len(data) == 0 {
 		return nil
+	}
+
+	if err := e.checkMemory(address, uint64(len(data))); err != nil {
+		return err
 	}
 
 	return e.err(e.api.memWrite(handle, address, unsafe.Pointer(&data[0]), uint64(len(data))))
@@ -238,6 +271,29 @@ func (e *Engine) RegWrite(register int, value uint64) error {
 	return e.err(e.api.regWrite(handle, int32(register), unsafe.Pointer(&value)))
 }
 
+func (e *Engine) RegRead128(register int) ([16]byte, error) {
+	handle, done, err := e.beginOperation()
+	if err != nil {
+		return [16]byte{}, err
+	}
+	defer done()
+
+	var value [16]byte
+	err = e.err(e.api.regRead(handle, int32(register), unsafe.Pointer(&value[0])))
+
+	return value, err
+}
+
+func (e *Engine) RegWrite128(register int, value [16]byte) error {
+	handle, done, err := e.beginOperation()
+	if err != nil {
+		return err
+	}
+	defer done()
+
+	return e.err(e.api.regWrite(handle, int32(register), unsafe.Pointer(&value[0])))
+}
+
 func (e *Engine) Start(begin, end uint64) error {
 	handle, done, err := e.beginOperation()
 	if err != nil {
@@ -246,7 +302,11 @@ func (e *Engine) Start(begin, end uint64) error {
 
 	defer done()
 
-	return e.err(e.api.emuStart(handle, begin, end, 0, 0))
+	if err := e.executionError(nil); err != nil {
+		return err
+	}
+
+	return e.executionError(e.err(e.api.emuStart(handle, begin, end, 0, 0)))
 }
 
 func (e *Engine) StartBounded(begin, end uint64, timeout time.Duration, instructionLimit uint64) error {
@@ -266,7 +326,11 @@ func (e *Engine) StartBounded(begin, end uint64, timeout time.Duration, instruct
 
 	defer done()
 
-	if err := e.err(e.api.emuStart(handle, begin, end, microseconds, instructionLimit)); err != nil {
+	if err := e.executionError(nil); err != nil {
+		return err
+	}
+
+	if err := e.executionError(e.err(e.api.emuStart(handle, begin, end, microseconds, instructionLimit))); err != nil {
 		return err
 	}
 

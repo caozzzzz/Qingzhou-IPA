@@ -39,6 +39,6 @@ codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 mkdir -p "$ROOT/dist"
 cd "$BUILD"
-/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.2.4-NoJIT-arm64.ipa"
-unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.2.4-NoJIT-arm64.ipa" | tail -1
-echo "Built: dist/Qingzhou-IPA-iOS-0.2.4-NoJIT-arm64.ipa"
+/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa"
+unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa" | tail -1
+echo "Built: dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa"

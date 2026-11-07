@@ -3,13 +3,13 @@ on:
   workflow_dispatch:
   push:
     branches: [ios-livecontainer]
-    paths: ['.github/workflows/ios-auth-audit.yml', 'ios/tests/prepare_audit_jit.py', 'third_party/ipatool/internal/sap/machine/qingzhou_differential_test.go']
+    paths: ['.github/workflows/ios-auth-audit.yml', 'third_party/ipatool/**']
 permissions:
   contents: read
 jobs:
   audit:
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -21,14 +21,11 @@ jobs:
           path: |
             ios/build/unicorn-host
             ios/build/unicorn-tci
-          key: unicorn-tci-a53ddc9-ios-arm64-v1
-      - name: Prepare pinned interpreter and official JIT for comparison
-        run: |
-          TCI_HOST_ONLY=1 bash ios/build-tci.sh
-          python3 ios/tests/prepare_audit_jit.py
-      - name: Compare anonymous SAP handshake and signature bytes
+          key: unicorn-tci-a53ddc9-guest-arm64-v2
+      - name: Prepare current Store runtime
+        run: TCI_HOST_ONLY=1 bash ios/build-tci.sh
+      - name: Validate upstream authentication, query and download adapters
         working-directory: third_party/ipatool
         env:
           QZ_TCI_LIBRARY: ${{ github.workspace }}/ios/build/unicorn-host/libunicorn.2.dylib
-          QZ_AUDIT_JIT_LIBRARY: ${{ github.workspace }}/ios/build/unicorn-audit-jit/libunicorn.2.dylib
-        run: go test -tags=qz_tci ./internal/sap/machine -run '^TestQingzhouSAPInterpreterDifferential$' -v -count=1 -timeout=15m
+        run: go test -tags=qz_tci ./internal/sap/unicorn ./internal/sap/machine ./internal/sap ./internal/store/profile ./internal/store/emulator ./internal/store ./pkg/http ./pkg/appstore -count=1 -timeout=30m

@@ -61,7 +61,11 @@ func (t *appstore) bag(guid string) (BagOutput, error) {
 
 	// The bare path can return unusable responses, including a 301 without
 	// Location. Normalize only the validated bag URL, retaining its host and query.
+	// A diagnostic override can select the bare path for device comparison.
 	authURL.Path = PrivateAppStoreAPIPathAuth + "/"
+	if AuthenticationPathMode() == AuthenticationPathBare {
+		authURL.Path = PrivateAppStoreAPIPathAuth
+	}
 	config.AuthEndpoint = authURL.String()
 
 	return BagOutput{AuthEndpoint: config.AuthEndpoint, SAPConfig: config}, nil

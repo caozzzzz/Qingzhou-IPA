@@ -13,6 +13,8 @@ import CryptoKit
     @Published var jobs: [DownloadJob] = []
     @Published var country = UserDefaults.standard.string(forKey: "country") ?? "us"
     @Published var platform = UserDefaults.standard.string(forKey: "platform") ?? "iphone"
+    @Published var authTransport = UserDefaults.standard.string(forKey: "authTransport") ?? "native"
+    @Published var authPathMode = UserDefaults.standard.string(forKey: "authPathMode") ?? "slash"
     @Published var query = ""
     let countries: [[String]]
     private let storefronts: [String: String]
@@ -65,8 +67,10 @@ import CryptoKit
         await authenticate(email: saved.email, password: saved.password, remember: saved.remember, code: code)
     }
     private func authenticate(email: String, password: String, remember: Bool, code: String) async {
+        UserDefaults.standard.set(authTransport, forKey: "authTransport")
+        UserDefaults.standard.set(authPathMode, forKey: "authPathMode")
         accountBusy = true; accountMessage = "正在连接 Apple…"; let generation = authenticationGeneration
-        let result = await auth.request(base("login", ["email": email, "password": password, "code": code]))
+        let result = await auth.request(base("login", ["email": email, "password": password, "code": code, "transport": authTransport, "pathMode": authPathMode]))
         guard generation == authenticationGeneration else { return }; accountBusy = false
         if result["need2FA"] as? Bool == true {
             pending = (email, password, remember, Date().addingTimeInterval(300)); needsCode = true; accountMessage = "请在受信任的设备上允许登录，并输入六位验证码。"

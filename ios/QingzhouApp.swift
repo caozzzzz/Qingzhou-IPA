@@ -216,6 +216,18 @@ struct AccountView: View {
                             Text("可填写受信任 Apple 设备上取得的新验证码；密码框只填账户密码，不要重复拼接验证码。").font(.caption).foregroundColor(.secondary)
                         }.padding(.top, 8)
                     }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("登录网络通道").font(.caption).foregroundColor(.secondary)
+                        Picker("登录网络通道", selection: $model.authTransport) {
+                            Text("系统 URLSession").tag("native")
+                            Text("Go 网络库").tag("go")
+                        }.pickerStyle(.segmented).disabled(model.accountBusy)
+                        Text("登录端点格式").font(.caption).foregroundColor(.secondary)
+                        Picker("登录端点格式", selection: $model.authPathMode) {
+                            Text("带斜杠（默认）").tag("slash")
+                            Text("原始路径").tag("bare")
+                        }.pickerStyle(.segmented).disabled(model.accountBusy)
+                    }
                     Toggle("记住登录状态", isOn: $remember)
                     Button { let value = password; let verification = manualVerification ? manualCode : ""; manualCode = ""; Task { await model.login(email: email, password: value, remember: remember, code: verification) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
                     Button("检查登录环境") { Task { await model.checkEnvironment() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
@@ -224,11 +236,11 @@ struct AccountView: View {
                 if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
-                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.3\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.4\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
                 }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.2.3 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.2.4 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
         .onChange(of: model.account?.email) { accountEmail in
             if accountEmail != nil { clearCredentials() }

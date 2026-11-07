@@ -43,7 +43,7 @@ jobs:
         run: bash ios/build-ipa.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: Qingzhou-IPA-iOS-0.2.3-NoJIT-arm64
+          name: Qingzhou-IPA-iOS-0.2.4-NoJIT-arm64
           path: dist/*.ipa
           if-no-files-found: error
           retention-days: 14

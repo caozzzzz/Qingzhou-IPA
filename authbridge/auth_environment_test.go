@@ -52,9 +52,28 @@ func TestMissingRedirectDiagnosticsAreAllowlisted(t *testing.T) {
 	err.Protocol = "private-secret"
 	err.Method = "private-secret"
 	err.AuthPath = "private-secret"
+	err.AuthHost = "private-secret"
 	err.ContentType = "private-secret"
 	_, message = authenticationError(err)
 	if strings.Contains(message, "private-") {
 		t.Fatal(message)
+	}
+}
+
+func TestHTTP404DiagnosticsIncludeRoutingContextWithoutSecrets(t *testing.T) {
+	storehttp.SetAuthenticationTransport("go")
+	appstore.SetAuthenticationPathMode("bare")
+	defer func() {
+		storehttp.SetAuthenticationTransport("native")
+		appstore.SetAuthenticationPathMode("slash")
+	}()
+	inner := &storehttp.UnexpectedResponseError{
+		StatusCode: 404, Protocol: "URLSession", Method: "POST", AuthHost: "POD", AuthPath: "AUTH_SLASH",
+		ContentType: "text/html; token=private-secret", BodyLength: 512, Snippet: "private-secret",
+	}
+	wrapped := errors.Join(errors.New("sign-in at Store pod request failed: authentication request failed after 3 attempts (HTTP 404, 404, 404): private-secret"), inner)
+	code, message := authenticationError(wrapped)
+	if code != "auth_http" || !strings.Contains(message, "主机 POD") || !strings.Contains(message, "尝试 3 次") || !strings.Contains(message, "已跳转到分区服务器") || !strings.Contains(message, "通道 go") || !strings.Contains(message, "端点 bare") || strings.Contains(message, "private-") {
+		t.Fatalf("unexpected 404 diagnostic: %s (%s)", code, message)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -135,6 +136,8 @@ type request struct {
 	OutputPath     string          `json:"outputPath"`
 	AcquireLicense bool            `json:"acquireLicense"`
 	Source         string          `json:"source"`
+	Transport      string          `json:"transport"`
+	PathMode       string          `json:"pathMode"`
 }
 
 func (in request) operationContext() context.Context {
@@ -208,7 +211,32 @@ func safeAuthenticationDiagnostics(e *storehttp.UnexpectedResponseError) string 
 	if length > 2<<20 {
 		length = 2 << 20
 	}
-	return fmt.Sprintf("网络 %s；请求 %s；路径 %s；响应 %s；%d 字节。", network, method, path, kind, length)
+	host := "unknown"
+	switch e.AuthHost {
+	case "BUY", "POD", "OTHER":
+		host = e.AuthHost
+	}
+	return fmt.Sprintf("网络 %s；请求 %s；主机 %s；路径 %s；响应 %s；%d 字节。", network, method, host, path, kind, length)
+}
+
+var authenticationAttemptsPattern = regexp.MustCompile(`after (\d) attempts \(((?:HTTP )?(?:\d{3}|transport error)(?:, (?:HTTP )?(?:\d{3}|transport error))*)\)`)
+
+// authenticationContext reports only allowlisted retry and routing facts parsed
+// from the internal error chain: attempt count, HTTP statuses and whether the
+// failure happened after a Store pod redirect.
+func authenticationContext(err error) string {
+	message := err.Error()
+	parts := []string{}
+	if match := authenticationAttemptsPattern.FindStringSubmatch(message); match != nil {
+		parts = append(parts, fmt.Sprintf("尝试 %s 次（%s）", match[1], match[2]))
+	}
+	if strings.Contains(message, "at Store pod") {
+		parts = append(parts, "已跳转到分区服务器")
+	} else {
+		parts = append(parts, "未发生跳转")
+	}
+	parts = append(parts, "通道 "+storehttp.AuthenticationTransport(), "端点 "+appstore.AuthenticationPathMode())
+	return strings.Join(parts, "；") + "。"
 }
 
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
@@ -216,20 +244,21 @@ func authenticationError(err error) (string, string) {
 	var responseError *storehttp.UnexpectedResponseError
 	if errors.As(err, &responseError) && responseError.StatusCode >= 100 && responseError.StatusCode <= 599 {
 		status := responseError.StatusCode
+		details := safeAuthenticationDiagnostics(responseError) + authenticationContext(err)
 		switch status {
 		case 301, 302, 307, 308:
 			if responseError.Reason == "authentication redirect is missing Location" {
-				return "auth_redirect_missing", fmt.Sprintf("Apple 认证响应缺少跳转地址，无法继续登录（HTTP %d；REDIRECT_NO_LOCATION）。%s", status, safeAuthenticationDiagnostics(responseError))
+				return "auth_redirect_missing", fmt.Sprintf("Apple 认证响应缺少跳转地址，无法继续登录（HTTP %d；REDIRECT_NO_LOCATION）。%s", status, details)
 			}
-			return "auth_redirect", fmt.Sprintf("Apple 认证跳转未完成（HTTP %d）。%s", status, safeAuthenticationDiagnostics(responseError))
+			return "auth_redirect", fmt.Sprintf("Apple 认证跳转未完成（HTTP %d）。%s", status, details)
 		case 401:
-			return "auth_http", "Apple 未接受登录请求（HTTP 401）。请核对密码；若开启双重认证，可展开手动验证码入口。"
+			return "auth_http", "Apple 未接受登录请求（HTTP 401）。请核对密码；若开启双重认证，可展开手动验证码入口。" + details
 		case 403, 404:
-			return "auth_http", fmt.Sprintf("Apple 登录接口未返回可用认证数据（HTTP %d）。这不等于密码错误；请记录此错误码，并对照登录环境检查结果。", status)
+			return "auth_http", fmt.Sprintf("Apple 登录接口未返回可用认证数据（HTTP %d）。这不等于密码错误。%s", status, details)
 		case 429:
-			return "auth_rate", "Apple 暂时限制了登录请求（HTTP 429），请稍后再试，避免连续尝试。"
+			return "auth_rate", "Apple 暂时限制了登录请求（HTTP 429），请稍后再试，避免连续尝试。" + details
 		default:
-			return "auth_http", fmt.Sprintf("Apple 登录接口返回异常（HTTP %d），请记录此错误码。", status)
+			return "auth_http", fmt.Sprintf("Apple 登录接口返回异常（HTTP %d）。%s", status, details)
 		}
 	}
 	var failure *appstore.AuthenticationFailure
@@ -344,6 +373,8 @@ func (b *bridge) handle(in request) response {
 				return out
 			}
 		}
+		storehttp.SetAuthenticationTransport(in.Transport)
+		appstore.SetAuthenticationPathMode(in.PathMode)
 		result, err := b.store.Login(appstore.LoginInput{Email: strings.TrimSpace(in.Email), Password: in.Password, AuthCode: in.Code})
 		in.Password = ""
 		if err != nil {

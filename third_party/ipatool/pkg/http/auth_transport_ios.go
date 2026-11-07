@@ -15,15 +15,21 @@ import (
 	"unsafe"
 )
 
-type nativeAuthTransport struct{}
+type nativeAuthTransport struct{ fallback http.RoundTripper }
 
-func authenticationTransport(_ http.RoundTripper) http.RoundTripper { return nativeAuthTransport{} }
+func authenticationTransport(fallback http.RoundTripper) http.RoundTripper {
+	return nativeAuthTransport{fallback: fallback}
+}
 
 // Only login uses this adapter. The Go client still owns its cookie jar and
 // allowlisted redirect validation; URLSession never follows redirects itself.
-func (nativeAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+// The user can switch login to Go's isolated net/http transport for comparison.
+func (t nativeAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := req.Context().Err(); err != nil {
 		return nil, err
+	}
+	if AuthenticationTransport() == AuthenticationTransportGo && t.fallback != nil {
+		return t.fallback.RoundTrip(req)
 	}
 	var body []byte
 	if req.Body != nil {

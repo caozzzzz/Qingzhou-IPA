@@ -73,6 +73,7 @@ type UnexpectedResponseError struct {
 	Protocol      string
 	Method        string
 	AuthPath      string
+	AuthHost      string
 }
 
 func (e *UnexpectedResponseError) Error() string {
@@ -452,13 +453,24 @@ func authenticationResponseError(res *http.Response, body []byte, reason string)
 			}
 		}
 	}
+	host := "unknown"
+	if res.Request != nil && res.Request.URL != nil {
+		switch name := strings.ToLower(res.Request.URL.Hostname()); {
+		case name == "buy.itunes.apple.com":
+			host = "BUY"
+		case strings.HasSuffix(name, "-buy.itunes.apple.com"):
+			host = "POD"
+		default:
+			host = "OTHER"
+		}
+	}
 	protocol := "unknown"
 	switch res.Proto {
 	case "HTTP/1.1", "HTTP/2.0", "URLSession":
 		protocol = res.Proto
 	}
 	return &UnexpectedResponseError{
-		Protocol: protocol, Method: method, AuthPath: path,
+		Protocol: protocol, Method: method, AuthPath: path, AuthHost: host,
 		StatusCode:    res.StatusCode,
 		Reason:        reason,
 		BodyLength:    len(body),

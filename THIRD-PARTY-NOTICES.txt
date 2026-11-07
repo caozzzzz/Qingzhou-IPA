@@ -1,4 +1,4 @@
-Authentication, version metadata and downloads use github.com/majd/ipatool/v2 v2.7.0 with a local metadata extension. See source third_party/ipatool/QINGZHOU-PATCH.md.
+Authentication, version metadata and downloads use github.com/majd/ipatool/v2 at upstream commit d9c0247daea564d3ec7d04a9b015d0a29af66b04 with Qingzhou compatibility patches. See third_party/ipatool/QINGZHOU-UPSTREAM.md and QINGZHOU-PATCH.md.
 Upstream: https://github.com/majd/ipatool
 
 MIT License

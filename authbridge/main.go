@@ -178,12 +178,50 @@ func public(acc appstore.Account) *publicAccount {
 	return &publicAccount{acc.Email, acc.Name, acc.StoreFront}
 }
 
+func safeAuthenticationDiagnostics(e *storehttp.UnexpectedResponseError) string {
+	network, method, path, kind := "unknown", "unknown", "unknown", "other"
+	switch e.Protocol {
+	case "HTTP/1.1", "HTTP/2.0", "URLSession":
+		network = e.Protocol
+	}
+	switch e.Method {
+	case "GET", "POST":
+		method = e.Method
+	}
+	switch e.AuthPath {
+	case "AUTH_BARE", "AUTH_SLASH":
+		path = e.AuthPath
+	}
+	contentType := strings.ToLower(strings.TrimSpace(strings.SplitN(e.ContentType, ";", 2)[0]))
+	switch contentType {
+	case "text/html":
+		kind = "HTML"
+	case "text/xml", "application/xml", "application/x-plist":
+		kind = "XML"
+	case "":
+		kind = "empty"
+	}
+	length := e.BodyLength
+	if length < 0 {
+		length = 0
+	}
+	if length > 2<<20 {
+		length = 2 << 20
+	}
+	return fmt.Sprintf("网络 %s；请求 %s；路径 %s；响应 %s；%d 字节。", network, method, path, kind, length)
+}
+
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
 	var responseError *storehttp.UnexpectedResponseError
 	if errors.As(err, &responseError) && responseError.StatusCode >= 100 && responseError.StatusCode <= 599 {
 		status := responseError.StatusCode
 		switch status {
+		case 301, 302, 307, 308:
+			if responseError.Reason == "authentication redirect is missing Location" {
+				return "auth_redirect_missing", fmt.Sprintf("Apple 认证响应缺少跳转地址，无法继续登录（HTTP %d；REDIRECT_NO_LOCATION）。%s", status, safeAuthenticationDiagnostics(responseError))
+			}
+			return "auth_redirect", fmt.Sprintf("Apple 认证跳转未完成（HTTP %d）。%s", status, safeAuthenticationDiagnostics(responseError))
 		case 401:
 			return "auth_http", "Apple 未接受登录请求（HTTP 401）。请核对密码；若开启双重认证，可展开手动验证码入口。"
 		case 403, 404:
@@ -198,6 +236,10 @@ func authenticationError(err error) (string, string) {
 	var transportError *storehttp.TransportError
 	if errors.As(err, &transportError) {
 		reason := "NETWORK"
+		var nativeError *storehttp.NativeAuthenticationNetworkError
+		if errors.As(err, &nativeError) && nativeError.Code < 0 && nativeError.Code >= -2000 {
+			reason = fmt.Sprintf("URLSession %d", nativeError.Code)
+		}
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			reason = "EOF"
 		}

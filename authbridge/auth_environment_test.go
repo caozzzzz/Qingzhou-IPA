@@ -42,3 +42,19 @@ func TestAuthenticationHTTPDiagnosticsNeverExposeResponseDetails(t *testing.T) {
 		t.Fatal("credential code missing")
 	}
 }
+
+func TestMissingRedirectDiagnosticsAreAllowlisted(t *testing.T) {
+	err := &storehttp.UnexpectedResponseError{StatusCode: 302, Reason: "authentication redirect is missing Location", Protocol: "URLSession", Method: "POST", AuthPath: "AUTH_SLASH", ContentType: "text/html; private-secret", BodyLength: 138, Snippet: "private-secret", CorrelationID: "private-secret"}
+	code, message := authenticationError(err)
+	if code != "auth_redirect_missing" || !strings.Contains(message, "REDIRECT_NO_LOCATION") || !strings.Contains(message, "URLSession") || strings.Contains(message, "private-") {
+		t.Fatal(message)
+	}
+	err.Protocol = "private-secret"
+	err.Method = "private-secret"
+	err.AuthPath = "private-secret"
+	err.ContentType = "private-secret"
+	_, message = authenticationError(err)
+	if strings.Contains(message, "private-") {
+		t.Fatal(message)
+	}
+}

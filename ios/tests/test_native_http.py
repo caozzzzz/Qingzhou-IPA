@@ -1,0 +1,48 @@
+"""Run on macOS: tests the exact URLSession adapter with local fixtures only."""
+import base64, http.server, json, pathlib, ssl, subprocess, tempfile, threading
+root=pathlib.Path(__file__).resolve().parents[2]
+calls=[]
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self,*args): pass
+    def do_POST(self):
+        body=self.rfile.read(int(self.headers.get("Content-Length",0)))
+        calls.append((self.path,body,self.headers.get("X-Apple-ActionSignature"),self.headers.get("Cookie")))
+        if self.path in ["/redirect","/missing"]:
+            self.send_response(302)
+            if self.path=="/redirect": self.send_header("location","/must-not-follow")
+            self.send_header("Content-Length","0");self.end_headers();return
+        self.send_response(200)
+        self.send_header("Set-Cookie","first=one; Path=/; HttpOnly")
+        self.send_header("Set-Cookie","second=two; Path=/; Expires=Wed, 01 Jan 2031 00:00:00 GMT")
+        self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
+server=http.server.ThreadingHTTPServer(("127.0.0.1",0),Handler)
+threading.Thread(target=server.serve_forever,daemon=True).start()
+with tempfile.TemporaryDirectory() as temp:
+    temp=pathlib.Path(temp);binary=temp/"native-http-test"
+    subprocess.run(["clang","-fobjc-arc","-framework","Foundation",str(root/"ios/NativeHTTP.m"),str(root/"ios/tests/NativeHTTPHarness.m"),"-o",str(binary)],check=True)
+    def run(path,headers=None,url=None):
+        payload={"url":url or f"http://127.0.0.1:{server.server_port}{path}","method":"POST","headers":headers or {"X-Apple-ActionSignature":["fixture-signature"]},"body":base64.b64encode(b"fixture-only-body").decode(),"timeout":5}
+        completed=subprocess.run([str(binary)],input=json.dumps(payload),text=True,capture_output=True,check=True,timeout=15)
+        return json.loads(completed.stdout)
+    result=run("/redirect");assert result["status"]==302
+    assert next(v for k,v in result["headers"].items() if k.lower()=="location")==["/must-not-follow"]
+    assert len(calls)==1 and calls[0][0]=="/redirect"
+    result=run("/missing");assert result["status"]==302
+    assert not any(k.lower()=="location" for k in result["headers"])
+    result=run("/echo");assert result["status"]==200 and base64.b64decode(result["body"])==b"fixture-only-body"
+    assert {c["Name"] for c in result["cookies"]}=={"first","second"}
+    assert next(c for c in result["cookies"] if c["Name"]=="first")["HTTPOnly"]
+    assert calls[-1][2]=="fixture-signature" and calls[-1][3] is None
+    run("/echo",{"Cookie":["explicit=from-go"]});assert calls[-1][3]=="explicit=from-go"
+    run("/echo");assert calls[-1][3] is None
+    # An untrusted TLS peer must fail; no trust callback/bypass is installed.
+    key=temp/"key.pem";cert=temp/"cert.pem"
+    subprocess.run(["openssl","req","-x509","-newkey","rsa:2048","-nodes","-keyout",str(key),"-out",str(cert),"-days","1","-subj","/CN=localhost"],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    tls=http.server.ThreadingHTTPServer(("127.0.0.1",0),Handler)
+    context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(str(cert),str(key));tls.socket=context.wrap_socket(tls.socket,server_side=True)
+    threading.Thread(target=tls.serve_forever,daemon=True).start()
+    result=run("/echo",url=f"https://127.0.0.1:{tls.server_port}/echo")
+    assert result.get("errorCode",0)!=0 and "status" not in result
+    tls.shutdown()
+server.shutdown()
+print("URLSession fixtures passed: signed POST/body, redirect interception, missing Location, cookies, session isolation, TLS rejection")

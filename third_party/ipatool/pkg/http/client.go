@@ -70,6 +70,9 @@ type UnexpectedResponseError struct {
 	ContentType   string
 	CorrelationID string
 	RetryAfter    string
+	Protocol      string
+	Method        string
+	AuthPath      string
 }
 
 func (e *UnexpectedResponseError) Error() string {
@@ -115,7 +118,7 @@ func NewClient[R interface{}](args Args) Client[R] {
 		isolated := http.DefaultTransport.(*http.Transport).Clone()
 		isolated.DisableKeepAlives = true
 		isolated.DialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
-		transport = isolated
+		transport = authenticationTransport(isolated)
 	}
 
 	return &client[R]{
@@ -435,7 +438,27 @@ func extractDocumentInnerBody(body []byte) []byte {
 // Do not retain bodies or arbitrary response headers: authentication responses
 // can contain credentials, tokens and cookies, including on failure.
 func authenticationResponseError(res *http.Response, body []byte, reason string) *UnexpectedResponseError {
+	method, path := "unknown", "unknown"
+	if res.Request != nil {
+		if res.Request.Method == "POST" || res.Request.Method == "GET" {
+			method = res.Request.Method
+		}
+		if res.Request.URL != nil {
+			switch res.Request.URL.Path {
+			case appStoreAuthPath:
+				path = "AUTH_BARE"
+			case appStoreAuthPath + "/":
+				path = "AUTH_SLASH"
+			}
+		}
+	}
+	protocol := "unknown"
+	switch res.Proto {
+	case "HTTP/1.1", "HTTP/2.0", "URLSession":
+		protocol = res.Proto
+	}
 	return &UnexpectedResponseError{
+		Protocol: protocol, Method: method, AuthPath: path,
 		StatusCode:    res.StatusCode,
 		Reason:        reason,
 		BodyLength:    len(body),

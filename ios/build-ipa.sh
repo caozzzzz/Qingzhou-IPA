@@ -14,13 +14,15 @@ export CGO_CFLAGS="-target arm64-apple-ios16.0 -isysroot $SDKROOT"
 cd "$ROOT/authbridge"
 go build -trimpath -buildmode=c-archive -o "$BUILD/libQingzhou.a" .
 
+xcrun --sdk iphoneos clang -fobjc-arc -O2 -target arm64-apple-ios16.0 -isysroot "$SDKROOT" -c "$ROOT/ios/NativeHTTP.m" -o "$BUILD/NativeHTTP.o"
+
 APP="$BUILD/Payload/QingzhouIPA.app"
 mkdir -p "$APP"
 xcrun --sdk iphoneos swiftc -swift-version 5 -parse-as-library -O \
   -target arm64-apple-ios16.0 -sdk "$SDKROOT" \
   -import-objc-header "$ROOT/ios/QingzhouBridge.h" \
   "$ROOT/ios/Models.swift" "$ROOT/ios/StoreModel.swift" "$ROOT/ios/QingzhouApp.swift" \
-  "$BUILD/libQingzhou.a" \
+  "$BUILD/libQingzhou.a" "$BUILD/NativeHTTP.o" \
   -framework UIKit -framework SwiftUI -framework Foundation -framework Security \
   -framework CoreFoundation -framework SystemConfiguration -lz -lresolv -liconv -lc++ \
   -Xlinker -force_load -Xlinker "$BUILD/unicorn-tci/libunicorn.a" -Xlinker -export_dynamic \
@@ -37,6 +39,6 @@ codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 mkdir -p "$ROOT/dist"
 cd "$BUILD"
-/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.2.2-NoJIT-arm64.ipa"
-unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.2.2-NoJIT-arm64.ipa" | tail -1
-echo "Built: dist/Qingzhou-IPA-iOS-0.2.2-NoJIT-arm64.ipa"
+/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.2.3-NoJIT-arm64.ipa"
+unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.2.3-NoJIT-arm64.ipa" | tail -1
+echo "Built: dist/Qingzhou-IPA-iOS-0.2.3-NoJIT-arm64.ipa"

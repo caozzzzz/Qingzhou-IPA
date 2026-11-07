@@ -224,11 +224,11 @@ struct AccountView: View {
                 if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
-                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.2\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.3\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
                 }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.2.2 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.2.3 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
         .onChange(of: model.account?.email) { accountEmail in
             if accountEmail != nil { clearCredentials() }

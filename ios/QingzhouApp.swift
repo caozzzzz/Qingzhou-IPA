@@ -72,7 +72,13 @@ struct VersionView: View {
     @Environment(\.dismiss) private var dismiss
     let app: CatalogApp
     let device: String
-    @State private var source = VersionSource.auto, result = SourceResult(), loading = false, selectedID = "", page = 0, message = "", help = false
+    @State private var source = VersionSource.auto
+    @State private var result = SourceResult()
+    @State private var loading = false
+    @State private var selectedID = ""
+    @State private var page = 0
+    @State private var message = ""
+    @State private var help = false
     @State private var generation = UUID()
     private var visible: [AppVersion] { Array(result.rows.dropFirst(page * 6).prefix(6)) }
     var body: some View {
@@ -180,7 +186,10 @@ struct ShareSheet: UIViewControllerRepresentable {
 }
 struct AccountView: View {
     @EnvironmentObject var model: StoreModel
-    @State private var email = "", password = "", code = "", remember = false
+    @State private var email = ""
+    @State private var password = ""
+    @State private var code = ""
+    @State private var remember = false
     var body: some View {
         NavigationView { ZStack { FrostBackground(); ScrollView { VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 10) { Label("LiveContainer + JIT", systemImage: "iphone").font(.headline); Text("请在 LiveContainer 中为轻舟开启 JIT，再登录或下载。搜索与第三方版本查询无需 JIT。此版本不依赖 TrollStore。").font(.caption).foregroundColor(.secondary) }.glassCard()

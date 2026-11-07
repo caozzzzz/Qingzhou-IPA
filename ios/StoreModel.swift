@@ -3,9 +3,13 @@ import CryptoKit
 
 @MainActor final class StoreModel: ObservableObject {
     @Published var account: Account?
-    @Published var accountBusy = false, needsCode = false
-    @Published var accountMessage = "", searchMessage = "", searching = false
-    @Published var apps: [CatalogApp] = [], jobs: [DownloadJob] = []
+    @Published var accountBusy = false
+    @Published var needsCode = false
+    @Published var accountMessage = ""
+    @Published var searchMessage = ""
+    @Published var searching = false
+    @Published var apps: [CatalogApp] = []
+    @Published var jobs: [DownloadJob] = []
     @Published var country = UserDefaults.standard.string(forKey: "country") ?? "us"
     @Published var platform = UserDefaults.standard.string(forKey: "platform") ?? "iphone"
     @Published var query = ""

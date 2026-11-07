@@ -19,6 +19,8 @@ if [[ ! -f "$BUILD/unicorn/libunicorn.a" ]]; then
   cmake --build "$BUILD/unicorn" --parallel "$(sysctl -n hw.ncpu)"
 fi
 
+if [[ "${BUILD_UNICORN_ONLY:-0}" == 1 ]]; then exit 0; fi
+
 export GOOS=ios GOARCH=arm64 CGO_ENABLED=1
 export CC="$(xcrun --sdk iphoneos --find clang) -target arm64-apple-ios16.0 -isysroot $SDKROOT"
 export CGO_CFLAGS="-target arm64-apple-ios16.0 -isysroot $SDKROOT"

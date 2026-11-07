@@ -16,6 +16,18 @@ jobs:
         with:
           go-version: '1.26.5'
           cache-dependency-path: authbridge/go.sum
+      - uses: actions/cache/restore@v4
+        id: unicorn-cache
+        with:
+          path: ios/build/unicorn
+          key: unicorn-ios-arm64-2.1.4-v1
+      - name: Build iOS Unicorn runtime
+        run: BUILD_UNICORN_ONLY=1 bash ios/build-ipa.sh
+      - uses: actions/cache/save@v4
+        if: steps.unicorn-cache.outputs.cache-hit != 'true'
+        with:
+          path: ios/build/unicorn
+          key: unicorn-ios-arm64-2.1.4-v1
       - name: Build arm64 IPA
         run: bash ios/build-ipa.sh
       - uses: actions/upload-artifact@v4

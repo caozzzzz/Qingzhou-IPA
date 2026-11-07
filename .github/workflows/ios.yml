@@ -22,7 +22,7 @@ jobs:
           path: |
             ios/build/unicorn-host
             ios/build/unicorn-tci
-          key: unicorn-tci-a53ddc9-guest-arm64-v2
+          key: unicorn-tci-a53ddc9-guest-aarch64-v3
       - name: Verify native authentication transport
         run: python3 ios/tests/test_native_http.py
       - name: Build no-JIT interpreter runtimes
@@ -33,7 +33,7 @@ jobs:
           path: |
             ios/build/unicorn-host
             ios/build/unicorn-tci
-          key: unicorn-tci-a53ddc9-guest-arm64-v2
+          key: unicorn-tci-a53ddc9-guest-aarch64-v3
       - name: Verify upstream Store authentication and download adapters
         working-directory: third_party/ipatool
         env:

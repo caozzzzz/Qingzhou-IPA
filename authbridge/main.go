@@ -241,6 +241,10 @@ func authenticationContext(err error) string {
 
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
+	if errors.Is(err, appstore.ErrAuthInteractionRequired) {
+		return "auth_interaction", "Apple 要求额外的账户操作，当前客户端无法自动完成。请先在系统 App Store 检查并完成账户提示，再重试（APPLE_ACCOUNT_ACTION）。"
+	}
+
 	var responseError *storehttp.UnexpectedResponseError
 	if errors.As(err, &responseError) && responseError.StatusCode >= 100 && responseError.StatusCode <= 599 {
 		status := responseError.StatusCode

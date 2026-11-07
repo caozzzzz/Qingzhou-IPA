@@ -37,6 +37,12 @@ func (r *Runtime) Execute(input Request) (response *http.Response, err error) {
 			err = recoveredError("Store request preparation", failure)
 		}
 
+		if err != nil {
+			if raw, ok := r.recoverAuthenticationDialog(err); ok {
+				response = raw
+				err = nil
+			}
+		}
 		if err != nil && r.lastResponse != nil && r.streamResponse {
 			_ = r.lastResponse.Body.Close()
 		}

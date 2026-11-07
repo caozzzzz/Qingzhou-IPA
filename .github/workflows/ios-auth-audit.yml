@@ -21,7 +21,7 @@ jobs:
           path: |
             ios/build/unicorn-host
             ios/build/unicorn-tci
-          key: unicorn-tci-a53ddc9-guest-arm64-v2
+          key: unicorn-tci-a53ddc9-guest-aarch64-v3
       - name: Prepare current Store runtime
         run: TCI_HOST_ONLY=1 bash ios/build-tci.sh
       - name: Validate upstream authentication, query and download adapters

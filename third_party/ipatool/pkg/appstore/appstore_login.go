@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	ErrAuthCodeRequired = errors.New("auth code is required")
+	ErrAuthCodeRequired        = errors.New("auth code is required")
+	ErrAuthInteractionRequired = errors.New("Apple requires interactive account action")
 )
 
 const (
@@ -136,11 +137,12 @@ type loginAccountResult struct {
 }
 
 type loginResult struct {
-	FailureType         string             `plist:"failureType,omitempty"`
-	CustomerMessage     string             `plist:"customerMessage,omitempty"`
-	Account             loginAccountResult `plist:"accountInfo,omitempty"`
-	DirectoryServicesID string             `plist:"dsPersonId,omitempty"`
-	PasswordToken       string             `plist:"passwordToken,omitempty"`
+	Dialog              map[string]interface{} `plist:"dialog,omitempty"`
+	FailureType         string                 `plist:"failureType,omitempty"`
+	CustomerMessage     string                 `plist:"customerMessage,omitempty"`
+	Account             loginAccountResult     `plist:"accountInfo,omitempty"`
+	DirectoryServicesID string                 `plist:"dsPersonId,omitempty"`
+	PasswordToken       string                 `plist:"passwordToken,omitempty"`
 }
 
 func (t *appstore) login(email, password, authCode, guid, endpoint string, signer ActionSigner) (Account, error) {
@@ -368,6 +370,8 @@ func (t *appstore) parseLoginResponse(res *http.Result[loginResult], attempt int
 		} else {
 			err = NewErrorWithMetadata(errors.New("something went wrong"), res)
 		}
+	} else if len(res.Data.Dialog) > 0 && (res.Data.PasswordToken == "" || res.Data.DirectoryServicesID == "") {
+		err = ErrAuthInteractionRequired
 	} else if res.StatusCode != gohttp.StatusOK || res.Data.PasswordToken == "" || res.Data.DirectoryServicesID == "" {
 		err = fmt.Errorf("apple returned no usable authentication response (HTTP %d): missing account credentials or unexpected status; try again later or from another network", res.StatusCode)
 	}

@@ -126,3 +126,29 @@ var _ = Describe("Missing profile snapshots", func() {
 		Expect(err).To(MatchError(ContainSubstring("missing Store profile page")))
 	})
 })
+
+var _ = Describe("Qingzhou URL query compatibility", func() {
+	It("supports both query setters through the framework selector bridge", func() {
+		ctx := context.Background()
+		bundle, err := assets.Load(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		prepared, err := profile.Load(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		guest, err := Open(ctx, bundle.AppleMediaServices, prepared)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(guest.Close)
+		object, err := guest.Invoke(guest.New("NSURLComponents", nil), "initWithURL:resolvingAgainstBaseURL:", guest.New("NSURL", "https://example.test/path"), 0)
+		Expect(err).NotTo(HaveOccurred())
+		for _, c := range []struct{ selector, value, want string }{
+			{"setQuery:", "bundleId=com.example.app&token=a+b=c", "bundleId=com.example.app&token=a+b=c"},
+			{"setQuery:", "name=中文 app#1", "name=%E4%B8%AD%E6%96%87%20app%231"},
+			{"setPercentEncodedQuery:", "token=a%2Bb%3D", "token=a%2Bb%3D"},
+		} {
+			_, err = guest.Invoke(object, c.selector, guest.New("NSString", c.value))
+			Expect(err).NotTo(HaveOccurred())
+			result, err := guest.Invoke(object, "percentEncodedQuery")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(guest.String(result)).To(Equal(c.want))
+		}
+	})
+})

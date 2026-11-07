@@ -195,6 +195,18 @@ func authenticationError(err error) (string, string) {
 		}
 	}
 	var failure *appstore.AuthenticationFailure
+	var transportError *storehttp.TransportError
+	if errors.As(err, &transportError) {
+		reason := "NETWORK"
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			reason = "EOF"
+		}
+		var networkError net.Error
+		if errors.As(err, &networkError) && networkError.Timeout() {
+			reason = "TIMEOUT"
+		}
+		return "auth_transport", fmt.Sprintf("连接 Apple 登录接口时中断（%s）。认证环境通过不代表登录连接也通过，可切换 Wi-Fi／蜂窝网络后对照此错误码。", reason)
+	}
 	if errors.As(err, &failure) {
 		if failure.Disabled {
 			return "locked", "Apple 返回账户停用提示，请先在官方 App Store 检查账户。"
@@ -228,7 +240,7 @@ func authenticationError(err error) (string, string) {
 	case strings.Contains(s, "sap"), strings.Contains(s, "signer"), strings.Contains(s, "bag"):
 		return "service", "无法准备 App Store 认证环境，请检查网络，稍后重试。"
 	default:
-		return "apple", "Apple 未完成此次认证。请确认账户可正常使用 App Store，再重试；也可能是服务或认证协议发生变化。"
+		return "apple", "Apple 未完成此次认证（AUTH_UNKNOWN）。请记录登录环境检查结果；当前信息不足以判断是账户还是协议问题。"
 	}
 }
 func (b *bridge) handle(in request) response {

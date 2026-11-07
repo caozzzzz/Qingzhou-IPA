@@ -91,7 +91,7 @@ func Load(ctx context.Context) (Bundle, error) {
 func cacheDirectory() (string, error) {
 	if runtime.GOOS == "ios" {
 		if root := os.Getenv("QINGZHOU_CACHE_DIR"); filepath.IsAbs(root) {
-			return filepath.Join(root, "ipatool", "sap", "apple-assets-v2"), nil
+			return filepath.Join(root, "ipatool", "sap", assetCacheDirectory), nil
 		}
 	}
 	root, err := os.UserCacheDir()

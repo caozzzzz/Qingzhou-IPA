@@ -205,11 +205,11 @@ struct AccountView: View {
                     Text("输入六位验证码").font(.headline)
                     TextField("验证码", text: $code).keyboardType(.numberPad).textContentType(.oneTimeCode).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
                     Button("验证并登录") { let value = code; code = ""; Task { await model.submitCode(value) } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
-                    Button("取消验证") { model.cancelLogin(); code = "" }
+                    Button("取消验证") { model.cancelLogin(); clearCredentials() }
                 } else {
                     Text("Apple 账户").font(.headline)
                     TextField("账号邮箱", text: $email).keyboardType(.emailAddress).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
-                    SecureField("密码", text: $password).textContentType(.password).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
+                    SecureField("密码", text: $password).disabled(model.accountBusy).textContentType(.password).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
                     DisclosureGroup("手动输入双重验证码", isExpanded: $manualVerification) {
                         VStack(alignment: .leading, spacing: 8) {
                             TextField("六位验证码", text: $manualCode).keyboardType(.numberPad).textContentType(.oneTimeCode).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
@@ -217,18 +217,22 @@ struct AccountView: View {
                         }.padding(.top, 8)
                     }
                     Toggle("记住登录状态", isOn: $remember)
-                    Button { let value = password; let verification = manualVerification ? manualCode : ""; password = ""; manualCode = ""; Task { await model.login(email: email, password: value, remember: remember, code: verification) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
+                    Button { let value = password; let verification = manualVerification ? manualCode : ""; manualCode = ""; Task { await model.login(email: email, password: value, remember: remember, code: verification) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
                     Button("检查登录环境") { Task { await model.checkEnvironment() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
-                    if model.accountBusy { Button("取消登录") { model.cancelLogin() } }
+                    if model.accountBusy { Button("取消登录") { model.cancelLogin(); clearCredentials() } }
                 }
                 if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
-                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.1\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.2.2\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
                 }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.2.1 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.2.2 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
+        .onChange(of: model.account?.email) { accountEmail in
+            if accountEmail != nil { clearCredentials() }
+        }
     }
+    private func clearCredentials() { password = ""; code = ""; manualCode = "" }
 }

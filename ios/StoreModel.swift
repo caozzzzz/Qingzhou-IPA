@@ -183,7 +183,9 @@ import CryptoKit
             UIApplication.shared.isIdleTimerDisabled = !workers.isEmpty; persist(); pump()
         }
         update(job.id) { $0.status = "preparing"; $0.error = "" }; persist()
-        guard let session else { update(job.id) { $0.status = "failed"; $0.error = "请重新登录。" }; return }
+        let exported = await auth.request(base("export"))
+        guard runs[job.id] == generation else { return }
+        guard exported["ok"] as? Bool == true, let session = exported["session"] as? JSON else { update(job.id) { $0.status = "failed"; $0.error = "请重新登录。" }; return }
         let restored = await worker.request(base("restore", ["session": session]))
         guard runs[job.id] == generation else { return }
         guard restored["ok"] as? Bool == true else { update(job.id) { $0.status = "failed"; $0.error = "无法准备下载会话。" }; return }

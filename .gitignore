@@ -1,6 +1,7 @@
 node_modules/
 /bin/
 /dist/
+/ios/build/
 /outputs/
 *.ipa
 *.staging

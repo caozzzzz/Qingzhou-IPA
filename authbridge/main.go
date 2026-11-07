@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,22 +118,31 @@ type savedSession struct {
 	Cookies []cookieRecord   `json:"cookies"`
 }
 type request struct {
-	ID             int           `json:"id"`
-	Action         string        `json:"action"`
-	Email          string        `json:"email"`
-	Password       string        `json:"password"`
-	Code           string        `json:"code"`
-	GUID           string        `json:"guid"`
-	Session        *savedSession `json:"session"`
-	Query          string        `json:"query"`
-	Country        string        `json:"country"`
-	Platform       string        `json:"platform"`
-	AppID          int64         `json:"appId"`
-	VersionID      string        `json:"versionId"`
-	OutputPath     string        `json:"outputPath"`
-	AcquireLicense bool          `json:"acquireLicense"`
-	Source         string        `json:"source"`
+	Context        context.Context `json:"-"`
+	ID             int             `json:"id"`
+	Action         string          `json:"action"`
+	Email          string          `json:"email"`
+	Password       string          `json:"password"`
+	Code           string          `json:"code"`
+	GUID           string          `json:"guid"`
+	Session        *savedSession   `json:"session"`
+	Query          string          `json:"query"`
+	Country        string          `json:"country"`
+	Platform       string          `json:"platform"`
+	AppID          int64           `json:"appId"`
+	VersionID      string          `json:"versionId"`
+	OutputPath     string          `json:"outputPath"`
+	AcquireLicense bool            `json:"acquireLicense"`
+	Source         string          `json:"source"`
 }
+
+func (in request) operationContext() context.Context {
+	if in.Context != nil {
+		return in.Context
+	}
+	return context.Background()
+}
+
 type publicAccount struct {
 	Email      string `json:"email"`
 	Name       string `json:"name"`

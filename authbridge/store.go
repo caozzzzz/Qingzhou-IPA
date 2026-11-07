@@ -89,7 +89,7 @@ func (b *bridge) storeOperation(in request) response {
 		var lastErr error
 		success := false
 		for _, channel := range sources {
-			ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+			ctx, cancel := context.WithTimeout(in.operationContext(), 55*time.Second)
 			result, e := appstore.QingzhouListVersions(b.store, appstore.ListVersionsInput{Context: ctx, Account: acc, App: app, Platform: platform}, channel)
 			cancel()
 			row := map[string]interface{}{"source": channel, "count": 0, "ok": e == nil}
@@ -130,7 +130,7 @@ func (b *bridge) storeOperation(in request) response {
 			out.ErrorCode = "input"
 			return out
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+		ctx, cancel := context.WithTimeout(in.operationContext(), 150*time.Second)
 		defer cancel()
 		result, e := b.store.GetVersionMetadata(appstore.GetVersionMetadataInput{Context: ctx, Account: acc, App: app, Platform: platform, VersionID: in.VersionID})
 		if e != nil {
@@ -176,7 +176,7 @@ func (b *bridge) storeOperation(in request) response {
 				}
 			}
 		}()
-		result, e := b.store.Download(appstore.DownloadInput{Context: context.Background(), Account: acc, App: app, OutputPath: in.OutputPath, Progress: bar, ExternalVersionID: in.VersionID, Platform: platform})
+		result, e := b.store.Download(appstore.DownloadInput{Context: in.operationContext(), Account: acc, App: app, OutputPath: in.OutputPath, Progress: bar, ExternalVersionID: in.VersionID, Platform: platform})
 		close(done)
 		<-stopped
 		if e == nil {

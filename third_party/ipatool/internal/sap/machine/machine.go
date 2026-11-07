@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/majd/ipatool/v2/internal/sap/assets"
 	"github.com/majd/ipatool/v2/internal/sap/machimage"
 	"github.com/majd/ipatool/v2/internal/sap/unicorn"
 )
-
-const sapGuestTimeout = time.Minute
 
 const (
 	returnAddress = uint64(0x0000000100000000)

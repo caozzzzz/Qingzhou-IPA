@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/blacktop/go-macho/pkg/xar"
@@ -197,6 +198,11 @@ func downloadFiles(ctx context.Context, specs []fileSpec, operation string) (map
 }
 
 func cacheDirectory() (string, error) {
+	if runtime.GOOS == "ios" {
+		if root := os.Getenv("QINGZHOU_CACHE_DIR"); filepath.IsAbs(root) {
+			return filepath.Join(root, "ipatool", "sap", "apple-assets-v2"), nil
+		}
+	}
 	root, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("find user cache directory: %w", err)

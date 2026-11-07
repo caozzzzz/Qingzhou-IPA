@@ -181,6 +181,14 @@ func public(acc appstore.Account) *publicAccount {
 func authenticationError(err error) (string, string) {
 	s := strings.ToLower(err.Error())
 	switch {
+	case strings.Contains(s, "cache apple sap"), strings.Contains(s, "find user cache"):
+		return "auth_cache", "无法保存认证组件，请检查应用缓存目录和可用空间（CACHE）。"
+	case strings.Contains(s, "load apple sap assets"), strings.Contains(s, "download apple sap assets"), strings.Contains(s, "open apple software update"):
+		return "auth_assets", "认证组件下载或校验失败，请确认当前网络能够访问 Apple 软件更新服务后重试（ASSETS）。"
+	case strings.Contains(s, "failed to get bag"):
+		return "auth_bag", "无法获取 App Store 认证配置，请切换网络后重试（BAG）。"
+	case strings.Contains(s, "unicorn"), strings.Contains(s, "execute sap guest"), strings.Contains(s, "initialize apple sap"):
+		return "auth_engine", "本机认证解释器执行失败，请点击“检查登录环境”查看是否可用（ENGINE）。"
 	case strings.Contains(s, "password"), strings.Contains(s, "credentials"), strings.Contains(s, "incorrect"), strings.Contains(s, "invalid credential"):
 		return "credentials", "Apple 未接受登录信息，请核对账号、密码及验证码。"
 	case strings.Contains(s, "locked"), strings.Contains(s, "disabled"):
@@ -208,6 +216,14 @@ func (b *bridge) handle(in request) response {
 		b.reset(in.GUID)
 	}
 	switch in.Action {
+	case "checkAuth":
+		if err := appstore.QingzhouCheckAuthentication(b.store); err != nil {
+			out.ErrorCode, out.Error = authenticationError(err)
+			return out
+		}
+		out.OK = true
+		out.Data = map[string]string{"message": "认证配置、组件和签名检查通过。此检查未使用 Apple 账号或密码。"}
+		return out
 	case "search":
 		data, err := catalogSearch(in.Query, in.Country, in.Platform)
 		if err != nil {

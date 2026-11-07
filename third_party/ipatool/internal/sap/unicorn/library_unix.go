@@ -1,4 +1,4 @@
-//go:build (darwin && !ios) || linux
+//go:build ((darwin && !ios) || linux) && !qz_tci
 
 package unicorn
 

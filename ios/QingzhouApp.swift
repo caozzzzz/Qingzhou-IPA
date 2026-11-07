@@ -192,7 +192,7 @@ struct AccountView: View {
     @State private var remember = false
     var body: some View {
         NavigationView { ZStack { FrostBackground(); ScrollView { VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 10) { Label("LiveContainer + JIT", systemImage: "iphone").font(.headline); Text("请在 LiveContainer 中为轻舟开启 JIT，再登录或下载。搜索与第三方版本查询无需 JIT。此版本不依赖 TrollStore。").font(.caption).foregroundColor(.secondary) }.glassCard()
+            VStack(alignment: .leading, spacing: 10) { Label("免 JIT 运行", systemImage: "iphone").font(.headline); Text("登录认证改为本机解释执行，无需开启 JIT。首次登录可能需要下载认证组件，请保持联网并将应用留在前台。").font(.caption).foregroundColor(.secondary) }.glassCard()
             VStack(alignment: .leading, spacing: 14) {
                 if let account = model.account {
                     Label(account.name.isEmpty ? account.email : account.name, systemImage: "person.crop.circle.fill").font(.headline)
@@ -209,13 +209,14 @@ struct AccountView: View {
                     TextField("账号邮箱", text: $email).keyboardType(.emailAddress).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
                     SecureField("密码", text: $password).textContentType(.password).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
                     Toggle("记住登录状态", isOn: $remember)
-                    Button { let value = password; password = ""; Task { await model.login(email: email, password: value, remember: remember) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在登录…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
+                    Button { let value = password; password = ""; Task { await model.login(email: email, password: value, remember: remember) } } label: { HStack { if model.accountBusy { ProgressView() }; Text(model.accountBusy ? "正在处理…" : "登录") }.frame(maxWidth: .infinity) }.buttonStyle(GlassButton()).disabled(model.accountBusy || password.isEmpty || email.isEmpty)
+                    Button("检查登录环境") { Task { await model.checkEnvironment() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
                     if model.accountBusy { Button("取消登录") { model.cancelLogin() } }
                 }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary) }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.1.0 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.2.0 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
     }
 }

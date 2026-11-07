@@ -87,6 +87,11 @@ struct DownloadJob: Identifiable, Codable {
 final class GoBridge {
     private let handle: UInt64 = QZCreate()
     private let queue = DispatchQueue(label: "Qingzhou.GoBridge.\(UUID())", qos: .userInitiated)
+    init() {
+        if let path = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.path {
+            _ = path.withCString { QZSetCacheDirectory(UnsafeMutablePointer(mutating: $0)) }
+        }
+    }
     func request(_ input: JSON) async -> JSON {
         guard let data = try? JSONSerialization.data(withJSONObject: input), let payload = String(data: data, encoding: .utf8) else { return ["ok": false, "error": "请求无效。"] }
         return await withCheckedContinuation { continuation in

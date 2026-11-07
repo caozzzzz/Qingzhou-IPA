@@ -72,13 +72,21 @@ import CryptoKit
             return
         }
         needsCode = false; pending = nil
-        guard result["ok"] as? Bool == true, let user = result["account"] as? JSON, var saved = result["session"] as? JSON else { accountMessage = text(result["error"]).isEmpty ? "Apple 未完成登录，请确认 LiveContainer 已开启 JIT。" : text(result["error"]); return }
+        guard result["ok"] as? Bool == true, let user = result["account"] as? JSON, var saved = result["session"] as? JSON else { accountMessage = text(result["error"]).isEmpty ? "Apple 未完成登录，请点击“检查登录环境”后重试。" : text(result["error"]); return }
         if var a = saved["account"] as? JSON { a.removeValue(forKey: "password"); saved["account"] = a }
         account = Account(user); session = saved; SessionKeychain.clear(); accountMessage = "已登录。"
         if remember {
             do { try SessionKeychain.save(JSONSerialization.data(withJSONObject: ["guid": guid, "session": saved])) }
             catch { accountMessage = "已登录，但无法保存会话；本次仅保留到退出。" }
         }
+    }
+    func checkEnvironment() async {
+        guard !accountBusy else { return }
+        accountBusy = true; accountMessage = "正在检查认证配置、组件与本机解释器，首次检查可能需要几分钟…"
+        let generation = authenticationGeneration
+        let result = await auth.request(base("checkAuth"))
+        guard generation == authenticationGeneration else { return }; accountBusy = false
+        accountMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
     }
     func cancelLogin() { authenticationGeneration = UUID(); pending = nil; needsCode = false; accountBusy = false; auth.cancel() }
     func logout() async {
@@ -203,7 +211,7 @@ import CryptoKit
         if result["ok"] as? Bool == true, text((result["data"] as? JSON)?["path"]) == partial.path {
             do { try FileManager.default.moveItem(at: partial, to: folder.appendingPathComponent(job.fileName)); update(job.id) { $0.status = "completed"; $0.percent = 1; $0.completedBytes = number((result["data"] as? JSON)?["sizeBytes"]); $0.total = $0.completedBytes } }
             catch { update(job.id) { $0.status = "failed"; $0.error = "无法保存 IPA 文件。" } }
-        } else { update(job.id) { $0.status = "failed"; $0.error = text(result["error"]).isEmpty ? "下载失败，请检查 JIT、账户许可和网络。" : text(result["error"]) } }
+        } else { update(job.id) { $0.status = "failed"; $0.error = text(result["error"]).isEmpty ? "下载失败，请检查账户许可和网络。" : text(result["error"]) } }
     }
     func pause(_ id: String) { runs.removeValue(forKey: id); workers[id]?.cancel(); update(id) { if $0.status != "completed" { $0.status = "paused" } }; persist() }
     func resume(_ id: String) { guard let job = jobs.first(where: { $0.id == id }), job.owner == owner, account != nil else { accountMessage = "请登录创建该任务的账户后重试。"; return }; update(id) { $0.status = "queued"; $0.error = "" }; persist(); pump() }

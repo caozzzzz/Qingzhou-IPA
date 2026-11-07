@@ -10,6 +10,8 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -26,6 +28,21 @@ type iosClient struct {
 var iosClients sync.Map
 var iosNextID atomic.Uint64
 
+//export QZSetCacheDirectory
+func QZSetCacheDirectory(path *C.char) C.int {
+	root := C.GoString(path)
+	if !filepath.IsAbs(root) {
+		return 0
+	}
+	if os.MkdirAll(root, 0700) != nil {
+		return 0
+	}
+	if os.Setenv("QINGZHOU_CACHE_DIR", root) != nil {
+		return 0
+	}
+	return 1
+}
+
 //export QZCreate
 func QZCreate() C.ulonglong {
 	c := &iosClient{}
@@ -39,7 +56,7 @@ func QZCreate() C.ulonglong {
 func QZCall(handle C.ulonglong, input *C.char) (output *C.char) {
 	defer func() {
 		if recover() != nil {
-			output = C.CString(`{"ok":false,"error":"认证服务异常，请检查 JIT 后重试。"}`)
+			output = C.CString(`{"ok":false,"error":"认证服务异常，请重新打开应用后重试。"}`)
 		}
 	}()
 	value, ok := iosClients.Load(uint64(handle))

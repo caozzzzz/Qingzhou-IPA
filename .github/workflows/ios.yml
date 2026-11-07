@@ -19,20 +19,29 @@ jobs:
       - uses: actions/cache/restore@v4
         id: unicorn-cache
         with:
-          path: ios/build/unicorn
-          key: unicorn-ios-arm64-2.1.4-v1
-      - name: Build iOS Unicorn runtime
-        run: BUILD_UNICORN_ONLY=1 bash ios/build-ipa.sh
+          path: |
+            ios/build/unicorn-host
+            ios/build/unicorn-tci
+          key: unicorn-tci-a53ddc9-ios-arm64-v1
+      - name: Build no-JIT interpreter runtimes
+        run: bash ios/build-tci.sh
       - uses: actions/cache/save@v4
         if: steps.unicorn-cache.outputs.cache-hit != 'true'
         with:
-          path: ios/build/unicorn
-          key: unicorn-ios-arm64-2.1.4-v1
+          path: |
+            ios/build/unicorn-host
+            ios/build/unicorn-tci
+          key: unicorn-tci-a53ddc9-ios-arm64-v1
+      - name: Verify interpreter authentication without an Apple account
+        working-directory: third_party/ipatool
+        env:
+          QZ_TCI_LIBRARY: ${{ github.workspace }}/ios/build/unicorn-host/libunicorn.2.dylib
+        run: go test -tags=qz_tci ./internal/sap/unicorn ./internal/sap/machine ./internal/sap -count=1 -timeout=15m
       - name: Build arm64 IPA
         run: bash ios/build-ipa.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: Qingzhou-IPA-iOS-0.1.0-arm64
+          name: Qingzhou-IPA-iOS-0.2.0-NoJIT-arm64
           path: dist/*.ipa
           if-no-files-found: error
           retention-days: 14

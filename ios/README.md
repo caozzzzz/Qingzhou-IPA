@@ -1,36 +1,41 @@
-# 轻舟 IPA iOS 0.3.0
+# 轻舟 IPA iOS 0.4.0
 
-本版将商店后端更新至 ipatool 主分支固定提交 `d9c0247daea564d3ec7d04a9b015d0a29af66b04`，接入 macOS 27 ARM64 SAP 服务以及 Apple 框架请求实现，覆盖认证、购买、版本查询和下载。保留原生 SwiftUI 界面、第三方历史版本源、队列与钥匙串会话保存。
+本版针对 Apple 新登录协议重新接入认证与设备验证。保留 SwiftUI 玻璃界面、应用搜索、地区选择、第三方版本源、iPhone/iPad 版本、下载队列与分享导出。
+
+## 认证与下载更新
+
+- 客户端标识升级为 Configurator 2.21，按 Apple 动态配置使用 `/auth/v1/native` 等认证入口，兼容新旧配置结构。旧的 slash/bare 诊断选项已移除。
+- 接入本地 Store 设备验证，处理 Apple 的 SP 注册挑战和 RP 重置；登录、免费许可领取、版本查询和下载请求刷新设备验证头。
+- SAP 签名继续由固定版本 ipatool 的 Apple ARM64 框架和 TCI 解释器完成；设备验证使用参考 iPadn 的 WebKit/WASM 模块。无需用户为本应用开启 JIT。
+- 仅在取得有效 Apple 会话令牌和账户标识后保存登录状态。环境检查包含动态配置、SAP 签名及本地设备组件初始化，不能代替实际账号登录或下载验证。
+- Apple 密码不落盘。设备验证模块只接收设备标识、挑战与证明状态；会话保存在 iOS 钥匙串，第三方版本源不接收 Apple 登录数据。
 
 ## 安装与验证
 
-- IPA 为 arm64，最低 iOS 16。通过 LiveContainer 导入，或使用自己的有效证书重签名安装；构建签名本身不等于普通设备可直接安装。
-- 不要求开启 JIT。首次认证需要从 Apple 下载并校验新版组件，与旧组件缓存分开存储；保持联网并将应用留在前台。
-- 先检查登录环境，再登录。如果失败，点击“复制检查结果”提供脱敏文本；不要发送密码或验证码。
-- 登录成功后，仍应验证 Apple 版本查询及实际下载，不能只验证界面显示登录。
-- “记住登录状态”只保存会话，不保存 Apple 密码。密码失败后保留在当前页面内存，成功或主动取消时清空。
-- iOS 下载以保持应用在前台为主，完成后通过分享菜单导出。
+IPA 为 arm64，最低 iOS 16。通过 LiveContainer 导入，或使用自己的有效证书重签名安装；构建的临时签名不能用于普通设备直接安装。
 
-## 上游兼容处理
+先确认账户页显示 **0.4.0**，点击“检查登录环境”，再使用自己的账号登录并验证一款已获许可的免费应用下载。首次需要联网下载并校验 SAP 组件，并初始化设备验证，请保持应用在前台。失败后可复制脱敏检查结果，不要发送密码、验证码、Cookie 或令牌。
 
-- 通过 Apple 框架构造与处理商店请求，保留 SAP 签名、Go 会话 Cookie 和目标校验。
-- 补充 `NSURLComponents setQuery:` / `setPercentEncodedQuery:`，保留参数分隔符和百分号编码语义，对应上游 #635。
-- 对上游 #634 的特定 `AMSError` 解释失败，只有在已收到可识别的原始 Apple 认证 plist 时，才交还严格登录解析器。不会创建令牌或将错误当成登录成功。额外账户操作显示 `APPLE_ACCOUNT_ACTION`。
-- 保留 HTTP 失败的脱敏结构信息，不显示请求、响应正文、密码、验证码、Cookie 或令牌。
+本版的自动化验证不使用真实账号。Apple 账户认证、双重验证、购买许可、历史版本可用性及最终 IPA 下载，仍需在目标手机确认。没有绕过付费应用购买许可的功能。
 
-## 当前限制
+## 来源与许可
 
-上游 #642 报告自 2026-11-06 UTC 起多个客户端出现 301/204/404 等登录异常，最新版主分支也有失败报告。本次更新不代表这个尚无正式修复的上游问题已解决。真实账号登录、许可和下载需要在目标设备上确认。
+- ipatool 基线：`majd/ipatool@d9c0247daea564d3ec7d04a9b015d0a29af66b04`。
+- 新协议适配参考：`trikesh32/ipatool` 的 `fix/native-store-download@175c3e92a58a38fe538f4d94e785de4e575c6972`。
+- Store 验证运行时与 plist 解析参考：`mengangs/ipadn@1ff9656c856cb29421a11e3de4816eee3251027a`。完整来源、原始组件声明、校验清单见 `third_party/ipadn-store-runtime/`。除 index.html 增加同源 CSP 外，运行时资源未修改。
 
-## 构建
+组合后的 iOS 应用按 GPL-2.0-or-later 发布，见 `ios/COPYING`；保留各组件原有许可与来源说明。对应源码公开在 `ios-livecontainer` 分支及 Release 源码归档。
 
-在 macOS 安装 Xcode 命令行工具、Go 1.26.5、CMake、Python 3 后运行：
+## 构建与检查
+
+在 macOS 安装 Xcode 命令行工具、Go 1.26.5、CMake、Python 3、Node.js 后运行：
 
 ```sh
+python3 ios/tests/verify_store_runtime.py
+node ios/tests/store_runtime_smoke.cjs
+bash ios/tests/test_store_webkit.sh
+python3 ios/tests/test_native_http.py
 bash ios/build-ipa.sh
 ```
 
-产物：`dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa`。
-构建使用固定源码与 SHA-256 校验；构建验证包含 ARM64 架构检查、原生网络测试、上游 SAP 和商店框架适配测试、IPA 结构和签名校验。
-
-上游来源与补丁说明见 `third_party/ipatool/QINGZHOU-UPSTREAM.md`。
+产物：`dist/Qingzhou-IPA-iOS-0.4.0-NoJIT-arm64.ipa`。GitHub Actions 还运行 SAP、商店框架、HTTP 与应用商店适配测试，检查 IPA 结构和临时签名。WebKit 测试不使用 Apple 账号，验证实际引擎加载 WASM、同源限制与空设备状态；不等同于真机账号测试。

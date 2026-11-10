@@ -1,6 +1,11 @@
 package appstore
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/majd/ipatool/v2/internal/store"
+)
 
 // QingzhouCheckAuthentication exercises the bag, resource loader and SAP signing
 // session without sending an Apple ID, password or authentication request.
@@ -33,5 +38,5 @@ func QingzhouCheckAuthentication(client AppStore) error {
 	if len(signature) == 0 {
 		return errors.New("SAP signing returned no signature")
 	}
-	return nil
+	return store.CheckMachineProof(context.Background(), guid)
 }

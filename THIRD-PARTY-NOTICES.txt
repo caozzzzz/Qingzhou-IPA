@@ -25,3 +25,16 @@ SOFTWARE.
 
 Electron and Chromium license notices are included in the runtime distribution.
 Other Go dependency licenses are included with the source deliverable.
+
+
+iOS 0.4.0 Store device verification:
+- mengangs/ipadn at 1ff9656c856cb29421a11e3de4816eee3251027a (GPL-2.0-or-later).
+  Store runtime and plist parser adaptations retain original notices. See
+  third_party/ipadn-store-runtime/ORIGINAL-NOTICES.md, PROVENANCE.json,
+  QINGZHOU-NOTICE.md and COPYING-GPL-2.0. Corresponding source:
+  https://github.com/caozzzzz/Qingzhou-IPA/tree/ios-livecontainer
+- Native protocol request/header adaptations reference trikesh32/ipatool
+  fix/native-store-download at 175c3e92a58a38fe538f4d94e785de4e575c6972 (MIT).
+  Existing ipatool MIT notices remain applicable.
+The derived combined iOS application is distributed under GPL-2.0-or-later;
+see ios/COPYING. Windows release licensing is not changed by this iOS integration.

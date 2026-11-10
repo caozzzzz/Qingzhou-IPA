@@ -192,14 +192,14 @@ func safeAuthenticationDiagnostics(e *storehttp.UnexpectedResponseError) string 
 		method = e.Method
 	}
 	switch e.AuthPath {
-	case "AUTH_BARE", "AUTH_SLASH":
+	case "AUTH_BARE", "AUTH_SLASH", "AUTH_NATIVE", "AUTH_NATIVE_FAST":
 		path = e.AuthPath
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.SplitN(e.ContentType, ";", 2)[0]))
 	switch contentType {
 	case "text/html":
 		kind = "HTML"
-	case "text/xml", "application/xml", "application/x-plist":
+	case "text/xml", "application/xml", "application/x-plist", "application/x-apple-plist":
 		kind = "XML"
 	case "":
 		kind = "empty"
@@ -213,7 +213,7 @@ func safeAuthenticationDiagnostics(e *storehttp.UnexpectedResponseError) string 
 	}
 	host := "unknown"
 	switch e.AuthHost {
-	case "BUY", "POD", "OTHER":
+	case "BUY", "POD", "OTHER", "NATIVE":
 		host = e.AuthHost
 	}
 	return fmt.Sprintf("网络 %s；请求 %s；主机 %s；路径 %s；响应 %s；%d 字节。", network, method, host, path, kind, length)
@@ -235,12 +235,16 @@ func authenticationContext(err error) string {
 	} else {
 		parts = append(parts, "未发生跳转")
 	}
-	parts = append(parts, "通道 "+storehttp.AuthenticationTransport(), "端点 "+appstore.AuthenticationPathMode())
+	parts = append(parts, "通道 "+storehttp.AuthenticationTransport(), "配置 Apple 动态入口")
 	return strings.Join(parts, "；") + "。"
 }
 
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "store device") || strings.Contains(message, "store_proof") || strings.Contains(message, "store verification") {
+		return "auth_device", "Apple 设备验证未完成（STORE_PROOF）。请保持应用在前台，检查设备验证环境后重试。"
+	}
 	if errors.Is(err, appstore.ErrAuthInteractionRequired) {
 		return "auth_interaction", "Apple 要求额外的账户操作，当前客户端无法自动完成。请先在系统 App Store 检查并完成账户提示，再重试（APPLE_ACCOUNT_ACTION）。"
 	}
@@ -339,7 +343,7 @@ func (b *bridge) handle(in request) response {
 			return out
 		}
 		out.OK = true
-		out.Data = map[string]string{"message": "认证配置、组件和签名检查通过。此检查未使用 Apple 账号或密码。"}
+		out.Data = map[string]string{"message": "Apple 动态配置、SAP 签名和本地设备验证组件检查通过。此检查不代表账号已登录，也未使用账号或密码。"}
 		return out
 	case "search":
 		data, err := catalogSearch(in.Query, in.Country, in.Platform)

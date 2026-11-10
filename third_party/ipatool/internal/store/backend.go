@@ -167,7 +167,7 @@ func (b *Backend) execute(ctx context.Context, input emulator.Request) (*http.Re
 		input.Headers.Set("User-Agent", apphttp.DefaultUserAgent)
 
 		if input.Operation == "purchase" {
-			input.Headers.Set("User-Agent", "Configurator/2.18 (Macintosh; OS X 15.3.2; 24D81) AppleWebKit/0620.2.4.11.6")
+			input.Headers.Set("User-Agent", apphttp.DefaultUserAgent)
 		}
 	}
 
@@ -293,7 +293,14 @@ func (b *Backend) requestTransport(input emulator.Request) func(*http.Request) (
 			}
 		}
 
-		response, err := client.Do(request)
+		guid := strings.ToUpper(hex.EncodeToString(input.HardwareID))
+		var response *http.Response
+		var err error
+		if needsStoreProof(request) {
+			response, err = sendWithMachineProof(request, guid, client.Do, platformMachineProof)
+		} else {
+			response, err = client.Do(request)
+		}
 		if err == nil && b.jar != nil {
 			b.jar.SetCookies(request.URL, response.Cookies())
 		}

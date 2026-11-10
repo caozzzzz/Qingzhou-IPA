@@ -722,6 +722,26 @@ func (r *Runtime) networkMessage(receiver uint64, class, selector string, meta b
 	return false
 }
 
+func encodeComponentQuery(query string) string {
+	const hex = "0123456789ABCDEF"
+
+	var encoded strings.Builder
+
+	for i := 0; i < len(query); i++ {
+		c := query[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || strings.IndexByte("-._~!$&'()*+,;=:@/?", c) >= 0 {
+			encoded.WriteByte(c)
+		} else {
+			encoded.WriteByte('%')
+			encoded.WriteByte(hex[c>>4])
+			encoded.WriteByte(hex[c&15])
+		}
+	}
+
+	return encoded.String()
+}
+
 func (r *Runtime) validJSONObject(address uint64, top bool, depth int) bool {
 	if depth > 64 {
 		return false

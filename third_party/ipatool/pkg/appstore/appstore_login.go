@@ -9,6 +9,7 @@ import (
 	"net"
 	gohttp "net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -170,6 +171,9 @@ func (t *appstore) login(email, password, authCode, guid, endpoint string, signe
 			return Account{}, fmt.Errorf("%s request failed: %w", stage, err)
 		}
 
+		if res.Data.DirectoryServicesID == "" {
+			res.Data.DirectoryServicesID = nativeResponseDSID(res.Headers)
+		}
 		retry, redirect, err := t.parseLoginResponse(&res, attempt, authCode, request.URL)
 		if err != nil {
 			return Account{}, err
@@ -198,6 +202,9 @@ func (t *appstore) login(email, password, authCode, guid, endpoint string, signe
 
 	sf, err := res.GetHeader(HTTPHeaderStoreFront)
 	if err != nil {
+		sf, err = res.GetHeader("X-Apple-Request-Store-Front")
+	}
+	if err != nil {
 		return Account{}, NewErrorWithMetadata(fmt.Errorf("failed to get storefront header: %w", err), res)
 	}
 
@@ -217,6 +224,9 @@ func (t *appstore) login(email, password, authCode, guid, endpoint string, signe
 		Pod:                 pod,
 	}
 
+	if acc.Email == "" {
+		acc.Email = email
+	}
 	data, err := json.Marshal(acc)
 	if err != nil {
 		return Account{}, fmt.Errorf("failed to marshal json: %w", err)
@@ -418,8 +428,9 @@ func (t *appstore) loginRequest(email, password, authCode, guid, endpoint string
 		URL:            endpoint,
 		ResponseFormat: http.ResponseFormatXML,
 		ActionSigner:   signer,
+		NoRedirects:    true,
 		Headers: map[string]string{
-			"Content-Type": "application/x-www-form-urlencoded",
+			"Content-Type": "application/x-apple-plist",
 		},
 		Payload: &http.XMLPayload{
 			Content: map[string]interface{}{
@@ -469,4 +480,22 @@ func authenticationRetryAfter(value string, now time.Time) (time.Duration, bool)
 	}
 
 	return 0, false
+}
+
+var nativeDSIDCookie = regexp.MustCompile(`(?:^|[;,\s]+)mz_at(?:0|_ssl)-([0-9]{1,24})=`)
+
+func nativeResponseDSID(headers map[string]string) string {
+	for key, value := range headers {
+		if strings.EqualFold(key, "X-Dsid") && len(value) > 0 && len(value) <= 24 && strings.IndexFunc(value, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
+			return value
+		}
+	}
+	for key, value := range headers {
+		if strings.EqualFold(key, "Set-Cookie") {
+			if match := nativeDSIDCookie.FindStringSubmatch(value); len(match) == 2 {
+				return match[1]
+			}
+		}
+	}
+	return ""
 }

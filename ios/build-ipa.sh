@@ -21,12 +21,19 @@ mkdir -p "$APP"
 xcrun --sdk iphoneos swiftc -swift-version 5 -parse-as-library -O \
   -target arm64-apple-ios16.0 -sdk "$SDKROOT" \
   -import-objc-header "$ROOT/ios/QingzhouBridge.h" \
-  "$ROOT/ios/Models.swift" "$ROOT/ios/StoreModel.swift" "$ROOT/ios/QingzhouApp.swift" \
+  "$ROOT/ios/StoreProofRuntime.swift" "$ROOT/ios/StoreProofServer.swift" "$ROOT/ios/ProofPropertyList.swift" "$ROOT/ios/Models.swift" "$ROOT/ios/StoreModel.swift" "$ROOT/ios/QingzhouApp.swift" \
   "$BUILD/libQingzhou.a" "$BUILD/NativeHTTP.o" \
-  -framework UIKit -framework SwiftUI -framework Foundation -framework Security \
+  -framework WebKit -framework Network -framework UIKit -framework SwiftUI -framework Foundation -framework Security \
   -framework CoreFoundation -framework SystemConfiguration -lz -lresolv -liconv -lc++ \
   -Xlinker -force_load -Xlinker "$BUILD/unicorn-tci/libunicorn.a" -Xlinker -export_dynamic \
   -o "$APP/QingzhouIPA"
+python3 "$ROOT/ios/tests/verify_store_runtime.py"
+cp -R "$ROOT/third_party/ipadn-store-runtime/files" "$APP/StoreRuntime"
+cp "$ROOT/third_party/ipadn-store-runtime/COPYING-GPL-2.0" "$APP/StoreRuntime/COPYING-GPL-2.0"
+cp "$ROOT/third_party/ipadn-store-runtime/ORIGINAL-NOTICES.md" "$APP/StoreRuntime/ORIGINAL-NOTICES.md"
+cp "$ROOT/third_party/ipadn-store-runtime/PROVENANCE.json" "$APP/StoreRuntime/PROVENANCE.json"
+cp "$ROOT/third_party/ipadn-store-runtime/QINGZHOU-NOTICE.md" "$APP/StoreRuntime/QINGZHOU-NOTICE.md"
+cp "$ROOT/ios/COPYING" "$APP/COPYING"
 cp "$ROOT/ios/Info.plist" "$APP/Info.plist"
 cp "$ROOT/ios/Resources/regions.json" "$APP/regions.json"
 cp "$ROOT/THIRD-PARTY-NOTICES.txt" "$APP/THIRD-PARTY-NOTICES.txt"
@@ -39,6 +46,6 @@ codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 mkdir -p "$ROOT/dist"
 cd "$BUILD"
-/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa"
-unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa" | tail -1
-echo "Built: dist/Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64.ipa"
+/usr/bin/ditto -c -k --keepParent Payload "$ROOT/dist/Qingzhou-IPA-iOS-0.4.0-NoJIT-arm64.ipa"
+unzip -t "$ROOT/dist/Qingzhou-IPA-iOS-0.4.0-NoJIT-arm64.ipa" | tail -1
+echo "Built: dist/Qingzhou-IPA-iOS-0.4.0-NoJIT-arm64.ipa"

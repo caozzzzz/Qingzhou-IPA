@@ -401,12 +401,18 @@ func authenticationResponseError(res *http.Response, body []byte, reason string)
 				path = "AUTH_BARE"
 			case appStoreAuthPath + "/":
 				path = "AUTH_SLASH"
+			case "/auth/v1/native", "/auth/v1/native/":
+				path = "AUTH_NATIVE"
+			case "/auth/v1/native/fast", "/auth/v1/native/fast/":
+				path = "AUTH_NATIVE_FAST"
 			}
 		}
 	}
 	host := "unknown"
 	if res.Request != nil && res.Request.URL != nil {
 		switch name := strings.ToLower(res.Request.URL.Hostname()); {
+		case name == "auth.itunes.apple.com":
+			host = "NATIVE"
 		case name == "buy.itunes.apple.com":
 			host = "BUY"
 		case strings.HasSuffix(name, "-buy.itunes.apple.com"):

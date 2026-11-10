@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ios-livecontainer]
-    paths: ['ios/**', 'authbridge/**', 'third_party/ipatool/**', '.github/workflows/ios.yml']
+    paths: ['ios/**', 'authbridge/**', 'third_party/ipatool/**', 'third_party/ipadn-store-runtime/**', '.github/workflows/ios.yml']
 permissions:
   contents: read
 jobs:
@@ -28,6 +28,12 @@ jobs:
             ios/build/unicorn-host
             ios/build/unicorn-tci
           key: unicorn-tci-a53ddc9-guest-aarch64-v3
+      - name: Verify Store runtime offline
+        run: |
+          python3 ios/tests/verify_store_runtime.py
+          node ios/tests/store_runtime_smoke.cjs
+      - name: Verify actual WebKit device runtime
+        run: bash ios/tests/test_store_webkit.sh
       - name: Verify native authentication transport
         run: python3 ios/tests/test_native_http.py
       - name: Build no-JIT interpreter runtimes
@@ -48,7 +54,7 @@ jobs:
         run: bash ios/build-ipa.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: Qingzhou-IPA-iOS-0.3.0-NoJIT-arm64
+          name: Qingzhou-IPA-iOS-0.4.0-NoJIT-arm64
           path: dist/*.ipa
           if-no-files-found: error
           retention-days: 14

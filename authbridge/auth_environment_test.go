@@ -73,7 +73,7 @@ func TestHTTP404DiagnosticsIncludeRoutingContextWithoutSecrets(t *testing.T) {
 	}
 	wrapped := errors.Join(errors.New("sign-in at Store pod request failed: authentication request failed after 3 attempts (HTTP 404, 404, 404): private-secret"), inner)
 	code, message := authenticationError(wrapped)
-	if code != "auth_http" || !strings.Contains(message, "主机 POD") || !strings.Contains(message, "尝试 3 次") || !strings.Contains(message, "已跳转到分区服务器") || !strings.Contains(message, "通道 go") || !strings.Contains(message, "端点 bare") || strings.Contains(message, "private-") {
+	if code != "auth_http" || !strings.Contains(message, "主机 POD") || !strings.Contains(message, "尝试 3 次") || !strings.Contains(message, "已跳转到分区服务器") || !strings.Contains(message, "通道 go") || !strings.Contains(message, "Apple 动态入口") || strings.Contains(message, "private-") {
 		t.Fatalf("unexpected 404 diagnostic: %s (%s)", code, message)
 	}
 }

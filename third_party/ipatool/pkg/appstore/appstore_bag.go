@@ -3,6 +3,7 @@ package appstore
 import (
 	"errors"
 	"fmt"
+	"howett.net/plist"
 	gohttp "net/http"
 	"net/url"
 	"strconv"
@@ -59,12 +60,9 @@ func (t *appstore) bag(guid string) (BagOutput, error) {
 		return BagOutput{}, fmt.Errorf("failed to parse authentication endpoint: %w", err)
 	}
 
-	// The bare path can return unusable responses, including a 301 without
-	// Location. Normalize only the validated bag URL, retaining its host and query.
-	// A diagnostic override can select the bare path for device comparison.
-	authURL.Path = PrivateAppStoreAPIPathAuth + "/"
-	if AuthenticationPathMode() == AuthenticationPathBare {
-		authURL.Path = PrivateAppStoreAPIPathAuth
+	// Legacy endpoints need a trailing slash; native paths must remain as advertised.
+	if !strings.EqualFold(authURL.Hostname(), "auth.itunes.apple.com") {
+		authURL.Path = PrivateAppStoreAPIPathAuth + "/"
 	}
 	config.AuthEndpoint = authURL.String()
 
@@ -87,6 +85,23 @@ func (t *appstore) fetchURLBag(guid string) (urlBag, error) {
 
 type bagResult struct {
 	URLBag urlBag `plist:"urlBag,omitempty"`
+}
+
+// Apple may return either a flat bag or a legacy urlBag envelope.
+func (b *bagResult) UnmarshalPlist(unmarshal func(interface{}) error) error {
+	var raw map[string]interface{}
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	if nested, ok := raw["urlBag"].(map[string]interface{}); ok {
+		raw = nested
+	}
+	data, err := plist.Marshal(raw, plist.XMLFormat)
+	if err != nil {
+		return err
+	}
+	_, err = plist.Unmarshal(data, &b.URLBag)
+	return err
 }
 
 type urlBag struct {
@@ -134,6 +149,14 @@ func validateAuthenticationEndpoint(endpoint string) error {
 	}
 
 	host := strings.ToLower(parsed.Hostname())
+	if host == "auth.itunes.apple.com" {
+		switch parsed.Path {
+		case "/auth/v1/native", "/auth/v1/native/", "/auth/v1/native/fast", "/auth/v1/native/fast/":
+			return nil
+		default:
+			return errors.New("unsupported authentication endpoint")
+		}
+	}
 	if host != PrivateAppStoreAPIDomain && !strings.HasSuffix(host, "-buy.itunes.apple.com") {
 		return errors.New("unsupported authentication endpoint")
 	}

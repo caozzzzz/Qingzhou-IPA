@@ -287,22 +287,29 @@ func (b *Backend) requestTransport(input emulator.Request) func(*http.Request) (
 	client := &http.Client{Transport: roundTripper, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
 	return func(request *http.Request) (*http.Response, error) {
-		if b.jar != nil && request.Header.Get("Cookie") == "" {
-			for _, cookie := range b.jar.Cookies(request.URL) {
-				request.AddCookie(cookie)
+		explicitCookies := request.Header.Get("Cookie") != ""
+		send := func(current *http.Request) (*http.Response, error) {
+			if b.jar != nil && !explicitCookies {
+				current.Header.Del("Cookie")
+				for _, cookie := range b.jar.Cookies(current.URL) {
+					current.AddCookie(cookie)
+				}
 			}
+			response, err := client.Do(current)
+			if err == nil && b.jar != nil {
+				// SP/RP replies can set cookies required by the replay too.
+				b.jar.SetCookies(current.URL, response.Cookies())
+			}
+			return response, err
 		}
 
 		guid := strings.ToUpper(hex.EncodeToString(input.HardwareID))
 		var response *http.Response
 		var err error
 		if needsStoreProof(request) {
-			response, err = sendWithMachineProof(request, guid, client.Do, platformMachineProof)
+			response, err = sendWithMachineProof(request, guid, send, platformMachineProof)
 		} else {
-			response, err = client.Do(request)
-		}
-		if err == nil && b.jar != nil {
-			b.jar.SetCookies(request.URL, response.Cookies())
+			response, err = send(request)
 		}
 
 		if err != nil {

@@ -6,26 +6,24 @@ final class StoreProofServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "Qingzhou.proof.loopback")
     private var listener: NWListener?
     private let token = UUID().uuidString
-    private(set) var baseURL: URL?
     private let files = Set(["index.html","sap-signer.js","sap.wasm","wasm_exec.js","unicorn_x86.js","libCoreADI.so","libstoreservicescore.so"])
     func start() async throws -> URL {
-        if let baseURL {return baseURL}
         return try await withCheckedThrowingContinuation { continuation in
             do {
                 let parameters = NWParameters.tcp
                 parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1",port: .any)
                 let server=try NWListener(using:parameters)
                 listener=server
-                var completed=false
+                let completion=ProofStartCompletion()
                 server.stateUpdateHandler = { [weak self] state in
-                    guard !completed else {return}
                     switch state {
                     case .ready:
                         guard let self, let port=server.port else {return}
-                        completed=true
+                        guard completion.claim() else {return}
                         let url=URL(string:"http://127.0.0.1:\(port.rawValue)/\(self.token)/")!
-                        self.baseURL=url;continuation.resume(returning:url)
-                    case .failed, .cancelled: completed=true;continuation.resume(throwing:ProofFailure.unavailable)
+                        continuation.resume(returning:url)
+                    case .failed, .cancelled:
+                        if completion.claim() {continuation.resume(throwing:ProofFailure.unavailable)}
                     default: break
                     }
                 }
@@ -38,7 +36,7 @@ final class StoreProofServer: @unchecked Sendable {
             } catch {continuation.resume(throwing:ProofFailure.unavailable)}
         }
     }
-    func stop() {listener?.cancel();listener=nil;baseURL=nil}
+    func stop() {listener?.cancel();listener=nil}
     private func read(_ connection:NWConnection,_ previous:Data) {
         connection.receive(minimumIncompleteLength:1,maximumLength:65536) { [weak self] data,_,done,error in
             guard let self else {connection.cancel();return}
@@ -99,3 +97,8 @@ final class ProofNoRedirect:NSObject,URLSessionTaskDelegate {
     func urlSession(_ session:URLSession,task:URLSessionTask,willPerformHTTPRedirection response:HTTPURLResponse,newRequest request:URLRequest,completionHandler:@escaping(URLRequest?)->Void){completionHandler(nil)}
 }
 enum ProofFailure:Error {case unavailable}
+private final class ProofStartCompletion:@unchecked Sendable {
+    private let lock=NSLock()
+    private var completed=false
+    func claim()->Bool {lock.lock();defer{lock.unlock()};if completed {return false};completed=true;return true}
+}

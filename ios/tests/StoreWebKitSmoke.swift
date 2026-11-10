@@ -23,6 +23,7 @@ import Foundation
         guard (try ProofPropertyList.dictionary(envelope))["status"] as? Int == 0 else { throw ProofFailure.unavailable }
         do { _ = try ProofPropertyList.dictionary(Data("<html><dict/></html>".utf8)); throw ProofFailure.unavailable }
         catch is ProofPropertyListError {}
+        print("PASS: Apple plist parser")
         let server = StoreProofServer()
         let base = try await server.start()
         defer { server.stop() }
@@ -32,6 +33,7 @@ import Foundation
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let response = response as? HTTPURLResponse, [403,404].contains(response.statusCode) else { throw ProofFailure.unavailable }
         }
+        print("PASS: loopback restrictions")
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 200, height: 200), configuration: configuration)
@@ -40,10 +42,11 @@ import Foundation
         window.contentView = web
         let navigation = SmokeNavigation()
         try await navigation.load(web, base.appendingPathComponent("runtime/index.html"))
-        let raw = try await web.callAsyncJavaScript("return await sapStoreProofHeaders(state, {proxyURL: proxy});", arguments: ["state":"{\"identifier\":\"0123456789abcdef\",\"files\":{}}", "proxy":base.appendingPathComponent("proxy").absoluteString], in: nil, in: .page)
+        print("PASS: WebKit local page loaded")
+        let raw = try await web.proofJavaScript("return await sapStoreProofHeaders(state, {proxyURL: proxy});", arguments: ["state":"{\"identifier\":\"0123456789abcdef\",\"files\":{}}", "proxy":base.appendingPathComponent("proxy").absoluteString])
         guard let raw = raw as? String, let value = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String:Any], value["provisioned"] as? Bool == false, let state = value["state"] as? [String:Any], state["identifier"] as? String == "0123456789abcdef" else { throw ProofFailure.unavailable }
         // CSP must prevent JavaScript from contacting any remote server directly.
-        let blocked = try await web.callAsyncJavaScript("try { await fetch('https://example.com/'); return false; } catch (_) { return true; }", arguments: [:], in: nil, in: .page)
+        let blocked = try await web.proofJavaScript("try { await fetch('https://example.com/'); return false; } catch (_) { return true; }", arguments: [:])
         guard blocked as? Bool == true else { throw ProofFailure.unavailable }
         print("PASS: production parser, loopback restrictions, WebKit WASM runtime and remote-fetch CSP; no Apple account used")
         window.close()
@@ -54,7 +57,7 @@ import Foundation
         DispatchQueue.main.asyncAfter(deadline: .now() + 150) { fputs("WebKit smoke timed out\n", stderr); exit(1) }
         Task { @MainActor in
             do { try await check(); exit(0) }
-            catch { fputs("WebKit smoke failed: component/parser/server error\n", stderr); exit(1) }
+            catch { let failure=error as NSError;let domain=["WKErrorDomain","NSURLErrorDomain"].contains(failure.domain) ? failure.domain : "component";fputs("WebKit smoke failed: \(domain) code \(failure.code)\n", stderr);exit(1) }
         }
         app.run()
     }

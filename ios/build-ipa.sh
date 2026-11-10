@@ -21,7 +21,7 @@ mkdir -p "$APP"
 xcrun --sdk iphoneos swiftc -swift-version 5 -parse-as-library -O \
   -target arm64-apple-ios16.0 -sdk "$SDKROOT" \
   -import-objc-header "$ROOT/ios/QingzhouBridge.h" \
-  "$ROOT/ios/StoreProofRuntime.swift" "$ROOT/ios/StoreProofServer.swift" "$ROOT/ios/ProofPropertyList.swift" "$ROOT/ios/Models.swift" "$ROOT/ios/StoreModel.swift" "$ROOT/ios/QingzhouApp.swift" \
+  "$ROOT/ios/StoreProofRuntime.swift" "$ROOT/ios/StoreProofServer.swift" "$ROOT/ios/ProofPropertyList.swift" "$ROOT/ios/ProofJavaScript.swift" "$ROOT/ios/Models.swift" "$ROOT/ios/StoreModel.swift" "$ROOT/ios/QingzhouApp.swift" \
   "$BUILD/libQingzhou.a" "$BUILD/NativeHTTP.o" \
   -framework WebKit -framework Network -framework UIKit -framework SwiftUI -framework Foundation -framework Security \
   -framework CoreFoundation -framework SystemConfiguration -lz -lresolv -liconv -lc++ \

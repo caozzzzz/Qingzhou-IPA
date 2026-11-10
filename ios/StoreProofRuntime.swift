@@ -36,7 +36,9 @@ import Security
         try Task.checkCancellation()
         busy=true;activeControl=control;let id=generation;defer{busy=false;activeControl=nil}
         if action=="reset" {SecItemDelete(query(guid) as CFDictionary);return ["headers":[String:String]()]}
-        let saved=state(guid)
+        // An environment check exercises a fresh, unprovisioned identity so it
+        // cannot consume counters from the saved device proof.
+        let saved:[String:Any]=action=="check" ? ["identifier":"0123456789abcdef","files":[String:String]()] : state(guid)
         if action=="headers",(saved["files"] as? [String:String] ?? [:]).isEmpty {return ["headers":[String:String]()]}
         presented=true;status=action=="provision" ? "正在向 Apple 验证设备…" : "正在加载设备验证组件…"
         defer{web=nil;presented=false;server.stop()}
@@ -49,7 +51,7 @@ import Security
         try Task.checkCancellation();guard generation==id else {throw CancellationError()}
         let stateJSON=String(data:try JSONSerialization.data(withJSONObject:saved),encoding:.utf8)!
         let script=action=="provision" ? "return await sapStoreProvision(state, challenge, guid, {proxyURL: proxy});" : "return await sapStoreProofHeaders(state, {proxyURL: proxy});"
-        let result=try await view.callAsyncJavaScript(script,arguments:["state":stateJSON,"challenge":request["challenge"] ?? "","guid":guid.uppercased(),"proxy":base.appendingPathComponent("proxy").absoluteString],in:nil,in:.page)
+        let result=try await view.proofJavaScript(script,arguments:["state":stateJSON,"challenge":request["challenge"] ?? "","guid":guid.uppercased(),"proxy":base.appendingPathComponent("proxy").absoluteString])
         try Task.checkCancellation();guard generation==id,let result=result as? String,let decoded=(try? JSONSerialization.jsonObject(with:Data(result.utf8))) as? [String:Any],let updated=decoded["state"] as? [String:Any] else {throw ProofFailure.unavailable}
         if action != "check" {try save(updated,guid)}
         let headers=decoded["headers"] as? [String:String] ?? [:]

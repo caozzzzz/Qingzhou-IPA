@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -48,6 +49,38 @@ func TestDeviceProofResetProvisionAndReplay(t *testing.T) {
 	defer res.Body.Close()
 	if calls != 3 || strings.Join(actions, ",") != "headers,reset,provision" {
 		t.Fatal("wrong proof lifecycle")
+	}
+}
+
+func TestDeviceProofRecoversFromInvalidCacheAndBodyChallenge(t *testing.T) {
+	req, _ := http.NewRequest("POST", "https://auth.itunes.apple.com/auth/v1/native", strings.NewReader("signed-body"))
+	actions := []string{}
+	calls := 0
+	res, err := sendWithMachineProof(req, "020000000001", func(request *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return &http.Response{StatusCode: 200, Header: http.Header{"X-Apple-Amd-Data": []string{"YQ=="}}, Body: io.NopCloser(strings.NewReader(`<Document><Protocol><key>customerMessage</key><string>AMD-Action:SP</string></Protocol></Document>`))}, nil
+		}
+		if request.Header.Get("X-Apple-AMD") != "fresh" {
+			t.Fatal("proof was not refreshed")
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("<plist><dict/></plist>"))}, nil
+	}, func(_ context.Context, action, _, _ string) (map[string]string, error) {
+		actions = append(actions, action)
+		if action == "headers" {
+			return nil, errors.New("invalid local identity")
+		}
+		if action == "provision" {
+			return map[string]string{"X-Apple-AMD": "fresh", "X-Apple-AMD-M": "machine"}, nil
+		}
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if calls != 2 || strings.Join(actions, ",") != "headers,reset,provision" {
+		t.Fatal("cached identity did not recover")
 	}
 }
 func TestDeviceProofNeverRunsForCDNAndRejectsInvalidChallenge(t *testing.T) {

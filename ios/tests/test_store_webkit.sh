@@ -16,7 +16,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 swiftc -swift-version 5 -parse-as-library -O \
-  "$ROOT/ios/tests/StoreWebKitSmoke.swift" "$ROOT/ios/StoreProofServer.swift" "$ROOT/ios/ProofPropertyList.swift" \
+  "$ROOT/ios/tests/StoreWebKitSmoke.swift" "$ROOT/ios/StoreProofServer.swift" "$ROOT/ios/ProofPropertyList.swift" "$ROOT/ios/ProofJavaScript.swift" \
   -framework AppKit -framework WebKit -framework Network -framework Foundation \
   -o "$APP/Contents/MacOS/ProofSmoke"
 codesign --force --sign - "$APP"

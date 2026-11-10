@@ -31,6 +31,7 @@ func IsAuthenticationRedirect(status int) bool {
 
 var (
 	documentXMLPattern = regexp.MustCompile(`(?is)<Document\b[^>]*>(.*)</Document>`)
+	protocolXMLPattern = regexp.MustCompile(`(?is)^\s*<Protocol\b[^>]*>(.*)</Protocol>\s*$`)
 	plistXMLPattern    = regexp.MustCompile(`(?is)<plist\b[^>]*>.*?</plist>`)
 	dictXMLPattern     = regexp.MustCompile(`(?is)<dict\b[^>]*>.*</dict>`)
 	htmlTagPattern     = regexp.MustCompile(`(?is)<[^>]*>`)
@@ -293,6 +294,9 @@ func normalizeXMLPlistBody(body []byte) []byte {
 
 	if documentBody := extractDocumentInnerBody(normalized); len(documentBody) > 0 {
 		normalized = documentBody
+	}
+	if protocol := protocolXMLPattern.FindSubmatch(normalized); len(protocol) == 2 {
+		normalized = bytes.TrimSpace(protocol[1])
 	}
 
 	if embeddedPlist := extractEmbeddedPlist(normalized); len(embeddedPlist) > 0 {

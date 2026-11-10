@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"unsafe"
 )
@@ -34,8 +35,13 @@ func platformMachineProof(ctx context.Context, action, challenge, guid string) (
 	var decoded struct {
 		Headers map[string]string `json:"headers"`
 		Error   string            `json:"error"`
+		Stage   string            `json:"stage"`
 	}
 	if json.Unmarshal([]byte(C.GoString(result)), &decoded) != nil || decoded.Error != "" {
+		switch decoded.Stage {
+		case "DEVICE_STATE", "DEVICE_SERVER", "DEVICE_PAGE", "DEVICE_PROVISION", "DEVICE_OTP", "DEVICE_SAVE":
+			return nil, fmt.Errorf("Store device verification failed (STORE_PROOF; stage=%s)", decoded.Stage)
+		}
 		return nil, errors.New("Store device verification failed (STORE_PROOF)")
 	}
 	headers := map[string]string{}

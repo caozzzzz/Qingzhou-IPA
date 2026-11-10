@@ -77,3 +77,10 @@ func TestHTTP404DiagnosticsIncludeRoutingContextWithoutSecrets(t *testing.T) {
 		t.Fatalf("unexpected 404 diagnostic: %s (%s)", code, message)
 	}
 }
+
+func TestDeviceProofFailureKeepsOnlyFixedStage(t *testing.T) {
+	code, message := authenticationError(errors.New("Store device verification failed (STORE_PROOF; stage=DEVICE_PROVISION); private-secret"))
+	if code != "auth_device" || !strings.Contains(message, "DEVICE_PROVISION") || strings.Contains(message, "private-secret") {
+		t.Fatal("unsafe or missing device stage")
+	}
+}

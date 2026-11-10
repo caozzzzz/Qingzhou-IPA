@@ -1,5 +1,5 @@
 """Run on macOS: tests the exact URLSession adapter with local fixtures only."""
-import base64, http.server, json, pathlib, ssl, subprocess, tempfile, threading
+import base64, gzip, http.server, json, pathlib, ssl, subprocess, tempfile, threading
 root=pathlib.Path(__file__).resolve().parents[2]
 calls=[]
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -12,6 +12,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.path=="/redirect": self.send_header("location","/must-not-follow")
             self.send_header("Content-Length","0");self.end_headers();return
         self.send_response(200)
+        if self.path=="/gzip":
+            compressed=gzip.compress(body)
+            self.send_header("Content-Encoding","gzip")
+            self.send_header("Content-Length",str(len(compressed)))
+            self.end_headers();self.wfile.write(compressed);return
         self.send_header("Set-Cookie","first=one; Path=/; HttpOnly")
         self.send_header("Set-Cookie","second=two; Path=/; Expires=Wed, 01 Jan 2031 00:00:00 GMT")
         self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
@@ -35,6 +40,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert calls[-1][2]=="fixture-signature" and calls[-1][3] is None
     run("/echo",{"Cookie":["explicit=from-go"]});assert calls[-1][3]=="explicit=from-go"
     run("/echo");assert calls[-1][3] is None
+    result=run("/gzip");assert result["status"]==200 and base64.b64decode(result["body"])==b"fixture-only-body"
     # An untrusted TLS peer must fail; no trust callback/bypass is installed.
     key=temp/"key.pem";cert=temp/"cert.pem"
     subprocess.run(["openssl","req","-x509","-newkey","rsa:2048","-nodes","-keyout",str(key),"-out",str(cert),"-days","1","-subj","/CN=localhost"],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -45,4 +51,4 @@ with tempfile.TemporaryDirectory() as temp:
     assert result.get("errorCode",0)!=0 and "status" not in result
     tls.shutdown()
 server.shutdown()
-print("URLSession fixtures passed: signed POST/body, redirect interception, missing Location, cookies, session isolation, TLS rejection")
+print("URLSession fixtures passed: signed POST/body, redirect interception, missing Location, cookies, session isolation, gzip decoding, TLS rejection")

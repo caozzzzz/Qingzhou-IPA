@@ -243,6 +243,11 @@ func authenticationContext(err error) string {
 func authenticationError(err error) (string, string) {
 	message := strings.ToLower(err.Error())
 	if strings.Contains(message, "store device") || strings.Contains(message, "store_proof") || strings.Contains(message, "store verification") {
+		for _, stage := range []string{"DEVICE_STATE", "DEVICE_SERVER", "DEVICE_PAGE", "DEVICE_PROVISION", "DEVICE_OTP", "DEVICE_SAVE"} {
+			if strings.Contains(message, "stage="+strings.ToLower(stage)) {
+				return "auth_device", "Apple 设备验证未完成（STORE_PROOF；" + stage + "）。请保持应用在前台，并记录此阶段代码。"
+			}
+		}
 		return "auth_device", "Apple 设备验证未完成（STORE_PROOF）。请保持应用在前台，检查设备验证环境后重试。"
 	}
 	if errors.Is(err, appstore.ErrAuthInteractionRequired) {

@@ -8,6 +8,7 @@ import Security
     @Published var presented=false
     @Published var web:WKWebView?
     @Published var status="正在准备设备验证…"
+    private(set) var failureStage="DEVICE_STATE"
     private let server=StoreProofServer()
     private var busy=false
     private var navigation:CheckedContinuation<Void,Error>?
@@ -35,6 +36,7 @@ import Security
         while busy {try Task.checkCancellation();try await Task.sleep(nanoseconds:100000000)}
         try Task.checkCancellation()
         busy=true;activeControl=control;let id=generation;defer{busy=false;activeControl=nil}
+        failureStage="DEVICE_STATE"
         if action=="reset" {SecItemDelete(query(guid) as CFDictionary);return ["headers":[String:String]()]}
         // An environment check exercises a fresh, unprovisioned identity so it
         // cannot consume counters from the saved device proof.
@@ -42,18 +44,21 @@ import Security
         if action=="headers",(saved["files"] as? [String:String] ?? [:]).isEmpty {return ["headers":[String:String]()]}
         presented=true;status=action=="provision" ? "正在向 Apple 验证设备…" : "正在加载设备验证组件…"
         defer{web=nil;presented=false;server.stop()}
+        failureStage="DEVICE_SERVER"
         let base=try await server.start()
         let config=WKWebViewConfiguration();config.websiteDataStore = .nonPersistent()
         let view=WKWebView(frame:.zero,configuration:config);view.navigationDelegate=self;web=view
+        failureStage="DEVICE_PAGE"
         try await withCheckedThrowingContinuation { (continuation:CheckedContinuation<Void,Error>) in
             navigation=continuation;view.load(URLRequest(url:base.appendingPathComponent("runtime/index.html")))
         }
         try Task.checkCancellation();guard generation==id else {throw CancellationError()}
         let stateJSON=String(data:try JSONSerialization.data(withJSONObject:saved),encoding:.utf8)!
         let script=action=="provision" ? "return await sapStoreProvision(state, challenge, guid, {proxyURL: proxy});" : "return await sapStoreProofHeaders(state, {proxyURL: proxy});"
+        failureStage=action=="provision" ? "DEVICE_PROVISION" : "DEVICE_OTP"
         let result=try await view.proofJavaScript(script,arguments:["state":stateJSON,"challenge":request["challenge"] ?? "","guid":guid.uppercased(),"proxy":base.appendingPathComponent("proxy").absoluteString])
         try Task.checkCancellation();guard generation==id,let result=result as? String,let decoded=(try? JSONSerialization.jsonObject(with:Data(result.utf8))) as? [String:Any],let updated=decoded["state"] as? [String:Any] else {throw ProofFailure.unavailable}
-        if action != "check" {try save(updated,guid)}
+        if action != "check" {failureStage="DEVICE_SAVE";try save(updated,guid)}
         let headers=decoded["headers"] as? [String:String] ?? [:]
         if action=="provision" {guard !(headers["X-Apple-AMD"] ?? "").isEmpty,!(headers["X-Apple-AMD-M"] ?? "").isEmpty else {throw ProofFailure.unavailable}}
         return ["headers":headers]
@@ -89,7 +94,7 @@ final class ProofTaskControl:@unchecked Sendable {
     let task=Task {@MainActor in
         defer{done.signal()}
         do {let result=try await StoreProofRuntime.shared.perform(request,control:control);box.finish(try JSONSerialization.data(withJSONObject:result))}
-        catch {box.finish(Data("{\"error\":\"STORE_PROOF\"}".utf8))}
+        catch {let reply:[String:String]=["error":"STORE_PROOF","stage":StoreProofRuntime.shared.failureStage];box.finish((try? JSONSerialization.data(withJSONObject:reply)) ?? Data("{\"error\":\"STORE_PROOF\"}".utf8))}
     }
     control.attach(task)
     if done.wait(timeout:.now()+180) == .timedOut {control.cancel();Task {@MainActor in StoreProofRuntime.shared.cancel(control)}}

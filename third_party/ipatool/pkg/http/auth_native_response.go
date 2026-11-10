@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -52,6 +54,15 @@ func decodeNativeAuthResponse(data []byte, req *http.Request) (*http.Response, e
 		}
 	}
 	result.Headers = canonical
+	// URLSession transparently decompresses these encodings. Do not hand the
+	// original compression headers to the framework or it may decode twice.
+	uncompressed := false
+	switch strings.ToLower(result.Headers.Get("Content-Encoding")) {
+	case "gzip", "deflate", "br":
+		result.Headers.Del("Content-Encoding")
+		result.Headers.Set("Content-Length", strconv.Itoa(len(result.Body)))
+		uncompressed = true
+	}
 	if len(result.Cookies) > 0 {
 		result.Headers.Del("Set-Cookie")
 		for _, c := range result.Cookies {
@@ -66,5 +77,5 @@ func decodeNativeAuthResponse(data []byte, req *http.Request) (*http.Response, e
 	}
 	return &http.Response{StatusCode: result.Status, Status: fmt.Sprintf("%d %s", result.Status, http.StatusText(result.Status)),
 		Header: result.Headers, Body: io.NopCloser(bytes.NewReader(result.Body)), ContentLength: int64(len(result.Body)),
-		Request: req, Proto: "URLSession"}, nil
+		Request: req, Proto: "URLSession", Uncompressed: uncompressed}, nil
 }

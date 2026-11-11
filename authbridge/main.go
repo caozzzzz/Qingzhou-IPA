@@ -20,6 +20,7 @@ import (
 	"github.com/majd/ipatool/v2/pkg/appstore"
 	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"github.com/majd/ipatool/v2/pkg/util/operatingsystem"
+	"qingzhou.local/authbridge/smsauth"
 )
 
 // No disk keychain: only the Electron main process may persist an encrypted session.
@@ -138,6 +139,9 @@ type request struct {
 	Source         string          `json:"source"`
 	Transport      string          `json:"transport"`
 	PathMode       string          `json:"pathMode"`
+	Attempt        string          `json:"attempt"`
+	PhoneID        int             `json:"phoneID"`
+	UseSMS         bool            `json:"useSMS"`
 }
 
 func (in request) operationContext() context.Context {
@@ -164,14 +168,18 @@ type response struct {
 	Event     string         `json:"event,omitempty"`
 }
 type bridge struct {
-	store    appstore.AppStore
-	keychain *memoryKeychain
-	jar      *sessionJar
-	guid     string
-	emit     func(response)
+	store          appstore.AppStore
+	keychain       *memoryKeychain
+	jar            *sessionJar
+	guid           string
+	emit           func(response)
+	storeChallenge *storeChallenge
+	smsClient      *smsauth.Client
+	sms            *smsauth.Session
 }
 
 func (b *bridge) reset(guid string) {
+	b.clearStoreChallenge()
 	b.keychain = &memoryKeychain{values: map[string][]byte{}}
 	b.jar = newJar()
 	b.guid = guid
@@ -342,6 +350,8 @@ func (b *bridge) handle(in request) response {
 		b.reset(in.GUID)
 	}
 	switch in.Action {
+	case "smsPrepare", "smsSend", "smsCancel":
+		return b.handleSMS(in, out)
 	case "checkAuth":
 		if err := appstore.QingzhouCheckAuthentication(b.store); err != nil {
 			out.ErrorCode, out.Error = authenticationError(err)
@@ -386,18 +396,45 @@ func (b *bridge) handle(in request) response {
 				return out
 			}
 		}
+		smsVerified := false
+		if in.UseSMS {
+			if !b.matchesStoreChallenge(in) || !b.sms.Active() {
+				return smsFailure(out, &smsauth.Error{Stage: "SMS_EXPIRED"})
+			}
+			if err := b.sms.Verify(in.operationContext(), in.Code); err != nil {
+				out.Data = b.sms.State()
+				return smsFailure(out, err)
+			}
+			b.sms = nil
+			smsVerified = true
+		} else if in.Code == "" {
+			b.clearStoreChallenge()
+		}
 		storehttp.SetAuthenticationTransport(in.Transport)
 		appstore.SetAuthenticationPathMode(in.PathMode)
 		result, err := b.store.Login(appstore.LoginInput{Email: strings.TrimSpace(in.Email), Password: in.Password, AuthCode: in.Code})
 		in.Password = ""
+		if in.operationContext().Err() != nil {
+			_ = b.keychain.Remove("account")
+			b.clearStoreChallenge()
+			return smsFailure(out, in.operationContext().Err())
+		}
 		if err != nil {
-			if errors.Is(err, appstore.ErrAuthCodeRequired) {
+			if errors.Is(err, appstore.ErrAuthCodeRequired) && in.Code == "" {
+				if validSMSAttempt(in.Attempt) {
+					b.storeChallenge = &storeChallenge{email: strings.TrimSpace(in.Email), attempt: in.Attempt, expires: time.Now().Add(5 * time.Minute)}
+				}
 				out.Need2FA = true
 				return out
 			}
 			out.ErrorCode, out.Error = authenticationError(err)
+			if smsVerified {
+				out.ErrorCode = "SMS_STORE_HANDOFF"
+				out.Error = "Apple 已通过短信验证，App Store 登录未完成（SMS_STORE_HANDOFF）。" + out.Error
+			}
 			return out
 		}
+		b.clearStoreChallenge()
 		result.Account.Password = ""
 		out.OK = true
 		out.Account = public(result.Account)

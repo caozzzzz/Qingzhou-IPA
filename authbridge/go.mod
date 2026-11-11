@@ -3,6 +3,7 @@ module qingzhou.local/authbridge
 go 1.26.5
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/majd/ipatool/v2 v2.7.0
 	github.com/schollz/progressbar/v3 v3.19.1
 	howett.net/plist v1.0.1

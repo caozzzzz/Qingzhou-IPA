@@ -38,3 +38,7 @@ iOS 0.4.0 Store device verification:
   Existing ipatool MIT notices remain applicable.
 The derived combined iOS application is distributed under GPL-2.0-or-later;
 see ios/COPYING. Windows release licensing is not changed by this iOS integration.
+
+iOS 0.4.1 SMS device provisioning uses github.com/coder/websocket v1.8.15.
+The license is included at third-party-licenses/coder-websocket-LICENSE.
+GrandSlam protocol references are listed in ios/README.md.

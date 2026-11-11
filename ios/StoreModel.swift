@@ -1,10 +1,31 @@
 import SwiftUI
 import CryptoKit
 
+struct SMSPhone: Identifiable {
+    let id: Int
+    let label: String
+}
+
+struct SMSVerification {
+    let phones: [SMSPhone]
+    let sentPhoneID: Int?
+    let resendAt: Date
+}
+
+private struct PendingStoreLogin {
+    let email: String
+    let password: String
+    let remember: Bool
+    let attempt: String
+    let expires: Date
+}
+
 @MainActor final class StoreModel: ObservableObject {
     @Published var account: Account?
     @Published var accountBusy = false
     @Published var needsCode = false
+    @Published private(set) var smsVerification: SMSVerification?
+    @Published var smsPhoneID = 0
     @Published var accountMessage = ""
     @Published var environmentMessage = ""
     @Published var searchMessage = ""
@@ -18,7 +39,7 @@ import CryptoKit
     private let storefronts: [String: String]
     private let auth = GoBridge(), catalog = GoBridge()
     private let guid: String
-    private var pending: (email: String, password: String, remember: Bool, expires: Date)?
+    private var pending: PendingStoreLogin?
     private var authenticationGeneration = UUID(), searchGeneration = UUID()
     private var workers: [String: GoBridge] = [:], runs: [String: UUID] = [:]
     private var session: JSON?
@@ -54,30 +75,128 @@ import CryptoKit
     func login(email: String, password: String, remember: Bool, code: String = "") async {
         guard !accountBusy, account == nil, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty else { return }
         guard code.isEmpty || code.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else { accountMessage = "手动验证码必须是六位数字。"; return }
-        pending = nil; needsCode = false
-        await authenticate(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password, remember: remember, code: code)
+        pending = nil
+        needsCode = false
+        smsVerification = nil
+        let login = PendingStoreLogin(
+            email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password, remember: remember,
+            attempt: UUID().uuidString, expires: .distantFuture
+        )
+        await authenticate(login, code: code, useSMS: false)
     }
     func submitCode(_ code: String) async {
-        guard !accountBusy, let saved = pending else { return }
-        guard saved.expires > Date() else { cancelLogin(); accountMessage = "验证等待已过期，请重新输入密码。"; return }
+        guard !accountBusy, let login = currentChallenge() else { return }
         guard code.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else { accountMessage = "请输入六位数字验证码。"; return }
-        pending = nil
-        await authenticate(email: saved.email, password: saved.password, remember: saved.remember, code: code)
-    }
-    private func authenticate(email: String, password: String, remember: Bool, code: String) async {
-        accountBusy = true; accountMessage = "正在连接 Apple…"; let generation = authenticationGeneration
-        let result = await auth.request(base("login", ["email": email, "password": password, "code": code, "transport": "native", "pathMode": "native"]))
-        guard generation == authenticationGeneration else { return }; accountBusy = false
-        if result["need2FA"] as? Bool == true {
-            pending = (email, password, remember, Date().addingTimeInterval(300)); needsCode = true; accountMessage = "请在受信任的设备上允许登录，并输入六位验证码。"
-            Task { try? await Task.sleep(nanoseconds: 300_000_000_000); if let p = pending, p.expires <= Date() { cancelLogin(); accountMessage = "验证等待已过期。" } }
+        if let smsVerification, smsVerification.sentPhoneID == nil {
+            accountMessage = "请先请求发送短信。"
             return
         }
-        needsCode = false; pending = nil
-        guard result["ok"] as? Bool == true, let user = result["account"] as? JSON, var saved = result["session"] as? JSON else { accountMessage = text(result["error"]).isEmpty ? "Apple 未完成登录，请点击“检查登录环境”后重试。" : text(result["error"]); return }
+        await authenticate(login, code: code, useSMS: smsVerification != nil)
+    }
+    private func currentChallenge() -> PendingStoreLogin? {
+        guard let pending else { return nil }
+        guard pending.expires > Date() else {
+            cancelLogin()
+            accountMessage = "验证等待已过期，请重新登录。"
+            return nil
+        }
+        return pending
+    }
+    func prepareSMS() async {
+        guard !accountBusy, let login = currentChallenge() else { return }
+        await performSMS("smsPrepare", login: login, fields: ["password": login.password], progress: "正在获取受信任手机号…")
+    }
+    func sendSMS() async {
+        guard !accountBusy, smsPhoneID > 0, let login = currentChallenge() else { return }
+        await performSMS("smsSend", login: login, fields: ["phoneID": smsPhoneID], progress: "正在请求 Apple 发送短信…")
+    }
+    func useDeviceCode() {
+        smsVerification = nil
+        accountMessage = "请输入受信任设备上显示的六位验证码。"
+    }
+    private func applySMSState(_ result: JSON) {
+        guard let data = result["data"] as? JSON, let rawPhones = data["phones"] as? [JSON] else { return }
+        let phones = rawPhones.compactMap { raw -> SMSPhone? in
+            guard let id = raw["id"] as? Int, id > 0, let label = raw["label"] as? String else { return nil }
+            return SMSPhone(id: id, label: label)
+        }
+        guard !phones.isEmpty else { return }
+        let sentPhoneID = data["sentPhoneID"] as? Int ?? 0
+        let retryAfter = data["retryAfter"] as? Int ?? 0
+        smsVerification = SMSVerification(
+            phones: phones,
+            sentPhoneID: sentPhoneID > 0 ? sentPhoneID : nil,
+            resendAt: Date().addingTimeInterval(Double(max(0, retryAfter)))
+        )
+        if !phones.contains(where: { $0.id == smsPhoneID }) {
+            smsPhoneID = sentPhoneID > 0 ? sentPhoneID : phones[0].id
+        }
+    }
+    private func performSMS(_ action: String, login: PendingStoreLogin, fields: JSON, progress: String) async {
+        accountBusy = true
+        accountMessage = progress
+        let generation = authenticationGeneration
+        var input = fields
+        input["email"] = login.email
+        input["attempt"] = login.attempt
+        let result = await auth.request(base(action, input))
+        guard generation == authenticationGeneration else { return }
+        accountBusy = false
+        applySMSState(result)
+        guard result["ok"] as? Bool == true else {
+            accountMessage = text(result["error"])
+            return
+        }
+        if let state = smsVerification, let sentID = state.sentPhoneID,
+           let phone = state.phones.first(where: { $0.id == sentID }) {
+            accountMessage = "Apple 已受理向\(phone.label)发送短信的请求。"
+        } else {
+            accountMessage = "选择受信任手机号后，点击发送短信。"
+        }
+    }
+    private func authenticate(_ login: PendingStoreLogin, code: String, useSMS: Bool) async {
+        accountBusy = true
+        accountMessage = useSMS ? "正在验证短信并登录 App Store…" : "正在连接 Apple…"
+        let generation = authenticationGeneration
+        let result = await auth.request(base("login", [
+            "email": login.email, "password": login.password, "code": code,
+            "attempt": login.attempt, "useSMS": useSMS, "transport": "native", "pathMode": "native"
+        ]))
+        guard generation == authenticationGeneration else { return }
+        accountBusy = false
+        if result["need2FA"] as? Bool == true {
+            pending = PendingStoreLogin(
+                email: login.email, password: login.password, remember: login.remember,
+                attempt: login.attempt, expires: Date().addingTimeInterval(300)
+            )
+            needsCode = true
+            accountMessage = "输入受信任设备的验证码，或选择使用短信验证码。"
+            let attempt = login.attempt
+            Task {
+                try? await Task.sleep(nanoseconds: 300_000_000_000)
+                if let challenge = pending, challenge.attempt == attempt, challenge.expires <= Date() {
+                    cancelLogin()
+                    accountMessage = "验证等待已过期，请重新登录。"
+                }
+            }
+            return
+        }
+        guard result["ok"] as? Bool == true, let user = result["account"] as? JSON, var saved = result["session"] as? JSON else {
+            applySMSState(result)
+            if text(result["errorCode"]) == "SMS_STORE_HANDOFF" {
+                smsVerification = nil
+            }
+            let failure = text(result["error"])
+            accountMessage = failure.isEmpty ? "Apple 未完成登录，请点击“检查登录环境”后重试。" : failure
+            return
+        }
+        needsCode = false
+        pending = nil
+        smsVerification = nil
         if var a = saved["account"] as? JSON { a.removeValue(forKey: "password"); saved["account"] = a }
         account = Account(user); session = saved; SessionKeychain.clear(); accountMessage = "已登录。"
-        if remember {
+        if login.remember {
             do { try SessionKeychain.save(JSONSerialization.data(withJSONObject: ["guid": guid, "session": saved])) }
             catch { accountMessage = "已登录，但无法保存会话；本次仅保留到退出。" }
         }
@@ -92,7 +211,19 @@ import CryptoKit
         environmentMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
         accountMessage = previousLoginMessage
     }
-    func cancelLogin() { StoreProofRuntime.shared.cancel(); authenticationGeneration = UUID(); pending = nil; needsCode = false; accountBusy = false; auth.cancel() }
+    func cancelLogin() {
+        let attempt = pending?.attempt
+        StoreProofRuntime.shared.cancel()
+        authenticationGeneration = UUID()
+        pending = nil
+        needsCode = false
+        smsVerification = nil
+        accountBusy = false
+        auth.cancel()
+        if let attempt {
+            Task { _ = await auth.request(base("smsCancel", ["attempt": attempt])) }
+        }
+    }
     func logout() async {
         cancelLogin(); for job in jobs where workers[job.id] != nil { pause(job.id) }
         SessionKeychain.clear(); session = nil; account = nil; accountMessage = "已退出登录。"

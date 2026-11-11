@@ -204,9 +204,55 @@ struct AccountView: View {
                     Text("账户商店：\(account.storefront)").font(.caption).foregroundColor(.secondary)
                     Button("退出登录") { Task { await model.logout() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
                 } else if model.needsCode {
-                    Text("输入六位验证码").font(.headline)
-                    TextField("验证码", text: $code).keyboardType(.numberPad).textContentType(.oneTimeCode).padding(13).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
-                    Button("验证并登录") { let value = code; code = ""; Task { await model.submitCode(value) } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
+                    if let sms = model.smsVerification {
+                        Text("短信验证").font(.headline)
+                        Picker("受信任手机号", selection: $model.smsPhoneID) {
+                            ForEach(sms.phones) { phone in
+                                Text(phone.label).tag(phone.id)
+                            }
+                        }
+                        .disabled(model.accountBusy)
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            let remaining = max(0, Int(sms.resendAt.timeIntervalSince(context.date).rounded(.up)))
+                            Button(remaining > 0 ? "\(remaining) 秒后可重发" : (sms.sentPhoneID == nil ? "发送短信" : "重新发送短信")) {
+                                code = ""
+                                Task { await model.sendSMS() }
+                            }
+                            .buttonStyle(GlassButton())
+                            .disabled(model.accountBusy || remaining > 0)
+                        }
+                        Button("改用设备验证码") { code = ""; model.useDeviceCode() }
+                            .disabled(model.accountBusy)
+                    } else {
+                        Text("输入设备验证码").font(.headline)
+                    }
+                    if model.smsVerification == nil || model.smsVerification?.sentPhoneID != nil {
+                        TextField("六位验证码", text: $code)
+                            .keyboardType(.numberPad)
+                            .textContentType(.oneTimeCode)
+                            .padding(13)
+                            .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))
+                            .disabled(model.accountBusy)
+                        Button("验证并登录") {
+                            let value = code
+                            code = ""
+                            Task { await model.submitCode(value) }
+                        }
+                        .buttonStyle(GlassButton())
+                        .disabled(model.accountBusy || code.count != 6)
+                    }
+                    if model.smsVerification == nil {
+                        Button("使用短信验证码") {
+                            code = ""
+                            Task { await model.prepareSMS() }
+                        }
+                        .buttonStyle(GlassButton())
+                        .disabled(model.accountBusy)
+                        Text("短信验证使用 SideStore 设备证明服务。账号、密码和验证码由 Apple 处理。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if model.accountBusy { ProgressView() }
                     Button("取消验证") { model.cancelLogin(); clearCredentials() }
                 } else {
                     Text("Apple 账户").font(.headline)
@@ -226,11 +272,11 @@ struct AccountView: View {
                 if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
-                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.4.0\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.4.1\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
                 }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.4.0 免 JIT 预览版\n登录和下载需要在目标设备上验证。").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.4.1 免 JIT 预览版").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
         .onChange(of: model.account?.email) { accountEmail in
             if accountEmail != nil { clearCredentials() }

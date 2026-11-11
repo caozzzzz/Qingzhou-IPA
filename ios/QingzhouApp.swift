@@ -265,7 +265,7 @@ struct AccountView: View {
                         }.padding(.top, 8)
                     }
                     Toggle("记住登录状态", isOn: $remember)
-                    DisclosureGroup("登录网络") {
+                    DisclosureGroup("登录网络：\(model.loginTransport == "go" ? "Go 通道" : "系统通道")") {
                         Picker("连接方式", selection: $model.loginTransport) {
                             Text("系统通道").tag("native")
                             Text("Go 通道").tag("go")
@@ -280,16 +280,21 @@ struct AccountView: View {
                     Text("短信验证使用 SideStore 设备证明服务。账号、密码和验证码由 Apple 处理。")
                         .font(.caption).foregroundColor(.secondary)
                     Button("检查登录环境") { Task { await model.checkEnvironment() } }.buttonStyle(GlassButton()).disabled(model.accountBusy)
-                    if model.accountBusy { Button("取消登录") { model.cancelLogin(); clearCredentials() } }
+                    if model.accountBusy {
+                        Button(model.checkingEnvironment ? "取消检查" : "取消登录") {
+                            if !model.checkingEnvironment { clearCredentials() }
+                            model.cancelLogin()
+                        }
+                    }
                 }
                 if !model.environmentMessage.isEmpty { Text("环境检查：" + model.environmentMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.accountMessage.isEmpty { Text(model.accountMessage).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                 if !model.environmentMessage.isEmpty || !model.accountMessage.isEmpty {
-                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.4.4\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption)
+                    Button("复制检查结果") { UIPasteboard.general.string = "轻舟 iOS 0.4.5\n环境检查：\(model.environmentMessage)\n登录结果：\(model.accountMessage)" }.font(.caption).disabled(model.checkingEnvironment)
                 }
             }.glassCard()
             Text("记住登录时，会话保存到 iOS 钥匙串，不保存 Apple 密码。第三方版本源仅收到公开 App ID。").font(.caption).foregroundColor(.secondary)
-            Text("轻舟 IPA iOS · 0.4.4 免 JIT 预览版").font(.caption2).foregroundColor(.secondary)
+            Text("轻舟 IPA iOS · 0.4.5 免 JIT 预览版").font(.caption2).foregroundColor(.secondary)
         }.padding(16) } }.navigationTitle("账户") }.navigationViewStyle(.stack)
         .onChange(of: model.account?.email) { accountEmail in
             if accountEmail != nil { clearCredentials() }

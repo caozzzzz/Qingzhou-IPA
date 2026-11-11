@@ -59,6 +59,18 @@ func TestAuthenticationEOFIdentifiesPhaseWithoutPrivateDetails(t *testing.T) {
 	}
 }
 
+func TestAuthenticationBagReportsBothChannelsWithoutURLs(t *testing.T) {
+	err := &storehttp.AuthenticationBagError{Attempts: []storehttp.AuthenticationBagAttempt{
+		{Transport: storehttp.AuthenticationTransportGo, Stage: "SEND", Cause: fmt.Errorf("private endpoint: %w", io.EOF)},
+		{Transport: storehttp.AuthenticationTransportNative, Stage: "HTTP", StatusCode: 503},
+	}}
+	code, message := authenticationError(&storehttp.TransportError{Err: err})
+	if code != "auth_bag" || !strings.Contains(message, "Go 通道 连接 EOF") ||
+		!strings.Contains(message, "系统通道 HTTP 503") || strings.Contains(message, "private") {
+		t.Fatalf("incorrect or unsafe bag diagnostic %s: %s", code, message)
+	}
+}
+
 func TestMissingRedirectDiagnosticsAreAllowlisted(t *testing.T) {
 	err := &storehttp.UnexpectedResponseError{StatusCode: 302, Reason: "authentication redirect is missing Location", Protocol: "URLSession", Method: "POST", AuthPath: "AUTH_SLASH", ContentType: "text/html; private-secret", BodyLength: 138, Snippet: "private-secret", CorrelationID: "private-secret"}
 	code, message := authenticationError(err)

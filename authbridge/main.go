@@ -295,6 +295,27 @@ func authenticationNetworkReason(err error) string {
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
 	message := strings.ToLower(err.Error())
+	var bagError *storehttp.AuthenticationBagError
+	if errors.As(err, &bagError) {
+		attempts := make([]string, 0, len(bagError.Attempts))
+		for _, attempt := range bagError.Attempts {
+			channel := "系统通道"
+			if attempt.Transport == storehttp.AuthenticationTransportGo {
+				channel = "Go 通道"
+			}
+			detail := "响应格式异常"
+			switch {
+			case attempt.Stage == "HTTP":
+				detail = fmt.Sprintf("HTTP %d", attempt.StatusCode)
+			case attempt.Stage == "SEND":
+				detail = "连接 " + authenticationNetworkReason(attempt.Cause)
+			case attempt.Stage == "READ":
+				detail = "读取 " + authenticationNetworkReason(attempt.Cause)
+			}
+			attempts = append(attempts, channel+" "+detail)
+		}
+		return "auth_bag", "无法读取 Apple 登录配置（BAG）。" + strings.Join(attempts, "；") + "。"
+	}
 	if strings.Contains(message, "store device") || strings.Contains(message, "store_proof") || strings.Contains(message, "store verification") {
 		for _, stage := range []string{"DEVICE_STATE", "DEVICE_SERVER", "DEVICE_PAGE", "DEVICE_PROVISION", "DEVICE_OTP", "DEVICE_SAVE"} {
 			if strings.Contains(message, "stage="+strings.ToLower(stage)) {

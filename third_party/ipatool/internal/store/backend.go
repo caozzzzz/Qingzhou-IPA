@@ -154,6 +154,10 @@ func (b *Backend) execute(ctx context.Context, input emulator.Request) (*http.Re
 		return nil, fmt.Errorf("store request: %w", err)
 	}
 
+	if runtime.GOOS == "ios" && input.Operation == "bag" && input.AuthenticationNetwork {
+		return b.fetchAuthenticationBag(ctx, input.URL)
+	}
+
 	hardware, err := b.hardware(input.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("store request: %w", err)

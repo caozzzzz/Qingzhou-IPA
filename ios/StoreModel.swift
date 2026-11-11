@@ -28,6 +28,7 @@ private struct PendingStoreLogin {
     @Published var smsPhoneID = 0
     @Published var accountMessage = ""
     @Published var environmentMessage = ""
+    @Published private(set) var checkingEnvironment = false
     @Published var loginTransport = UserDefaults.standard.string(forKey: "loginTransport") == "go" ? "go" : "native" {
         didSet { UserDefaults.standard.set(loginTransport, forKey: "loginTransport") }
     }
@@ -224,13 +225,15 @@ private struct PendingStoreLogin {
     }
     func checkEnvironment() async {
         guard !accountBusy else { return }
-        let previousLoginMessage = accountMessage
-        accountBusy = true; accountMessage = "正在检查 Apple 配置、签名和认证连接，首次检查可能需要几分钟…"
+        accountBusy = true
+        checkingEnvironment = true
+        environmentMessage = "正在检查 Apple 配置、签名和认证连接…"
         let generation = authenticationGeneration
         let result = await auth.request(base("checkAuth", ["transport": loginTransport]))
-        guard generation == authenticationGeneration else { return }; accountBusy = false
+        guard generation == authenticationGeneration else { return }
+        accountBusy = false
+        checkingEnvironment = false
         environmentMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
-        accountMessage = previousLoginMessage
     }
     func cancelLogin() {
         let attempt = pending?.attempt
@@ -240,6 +243,10 @@ private struct PendingStoreLogin {
         needsCode = false
         smsVerification = nil
         accountBusy = false
+        if checkingEnvironment {
+            checkingEnvironment = false
+            environmentMessage = "检查已取消。"
+        }
         auth.cancel()
         if let attempt {
             Task { _ = await auth.request(base("smsCancel", ["attempt": attempt])) }

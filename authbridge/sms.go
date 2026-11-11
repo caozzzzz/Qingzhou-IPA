@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"regexp"
 	"runtime"
@@ -67,8 +68,15 @@ func (b *bridge) handleSMS(in request, out response) response {
 			if in.Password == "" || len(in.Password) > 4096 {
 				return smsFailure(out, &smsauth.Error{Stage: "SMS_CREDENTIALS"})
 			}
-			if b.smsClient == nil {
-				b.smsClient = smsauth.New(os.Getenv("QINGZHOU_CACHE_DIR"), storehttp.AuthenticationRoundTripper(nil))
+			mode := storehttp.AuthenticationTransportNative
+			var transport http.RoundTripper = storehttp.AuthenticationRoundTripper(nil)
+			if in.Transport == storehttp.AuthenticationTransportGo {
+				mode = storehttp.AuthenticationTransportGo
+				transport = nil
+			}
+			if b.smsClient == nil || b.smsTransport != mode {
+				b.smsClient = smsauth.New(os.Getenv("QINGZHOU_CACHE_DIR"), transport)
+				b.smsTransport = mode
 			}
 			session, err := b.smsClient.Begin(ctx, b.storeChallenge.email, in.Password, b.storeChallenge.expires)
 			if err != nil {
@@ -140,6 +148,9 @@ func smsFailure(out response, err error) response {
 	}
 	if failure.Code != 0 {
 		out.Error += fmt.Sprintf("，Apple 代码 %d", failure.Code)
+	}
+	if failure.Unwrap() != nil {
+		out.Error += "，" + authenticationNetworkReason(failure)
 	}
 	out.Error += "）"
 	return out

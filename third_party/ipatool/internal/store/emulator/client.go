@@ -28,6 +28,7 @@ type Request struct {
 	Sign                           func([]byte) ([]byte, error)
 	Transport                      func(*http.Request) (*http.Response, error)
 	Stream, Raw, NoRedirects       bool
+	AuthenticationNetwork          bool
 }
 
 //nolint:nonamedreturns // Recovery and streamed-body cleanup must update the returned error.
@@ -37,6 +38,9 @@ func (r *Runtime) Execute(input Request) (response *http.Response, err error) {
 			err = recoveredError("Store request preparation", failure)
 		}
 
+		if r.transportError != nil && (r.authRequest || input.AuthenticationNetwork) {
+			response, err = nil, r.transportError
+		}
 		if err != nil {
 			if raw, ok := r.recoverAuthenticationDialog(err); ok {
 				response = raw

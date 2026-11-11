@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ func (e *executor) Send(request apphttp.Request, body []byte) (*http.Response, e
 		ctx = context.Background()
 	}
 
-	input := emulator.Request{URL: request.URL, Method: request.Method, Operation: e.operation, Format: string(request.ResponseFormat), Timeout: request.Timeout, Body: body, Headers: make(http.Header), NoRedirects: request.NoRedirects, Raw: request.ResponseFormat == apphttp.ResponseFormatRaw}
+	input := emulator.Request{URL: request.URL, Method: request.Method, Operation: e.operation, Format: string(request.ResponseFormat), Timeout: request.Timeout, Body: body, Headers: make(http.Header), NoRedirects: request.NoRedirects, Raw: request.ResponseFormat == apphttp.ResponseFormatRaw, AuthenticationNetwork: request.AuthenticationNetwork}
 	for key, value := range request.Headers {
 		input.Headers.Set(key, value)
 	}
@@ -97,7 +98,7 @@ func (e *executor) Do(request *http.Request) (*http.Response, error) {
 		}
 	}
 
-	return e.backend.execute(request.Context(), emulator.Request{URL: request.URL.String(), Method: request.Method, Headers: request.Header.Clone(), Body: body, Operation: e.operation, Stream: e.operation == "transfer"})
+	return e.backend.execute(request.Context(), emulator.Request{URL: request.URL.String(), Method: request.Method, Headers: request.Header.Clone(), Body: body, Operation: e.operation, Stream: e.operation == "transfer", AuthenticationNetwork: e.operation == "api"})
 }
 
 func (b *Backend) hardware(parameters map[string]any) ([]byte, error) {
@@ -274,15 +275,10 @@ func (b *Backend) requestTransport(input emulator.Request) func(*http.Request) (
 		timeout = 30 * time.Second
 	}
 
-	transport := b.transport
-
-	if input.Operation == "authenticate" {
-		transport = b.authTransport
-	}
-
-	var roundTripper http.RoundTripper = transport
-	if input.Operation == "authenticate" {
-		roundTripper = apphttp.AuthenticationRoundTripper(transport)
+	useLoginTransport := input.Operation == "authenticate" || (runtime.GOOS == "ios" && input.AuthenticationNetwork)
+	var roundTripper http.RoundTripper = b.transport
+	if useLoginTransport {
+		roundTripper = apphttp.AuthenticationRoundTripper(b.authTransport)
 	}
 	client := &http.Client{Transport: roundTripper, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 

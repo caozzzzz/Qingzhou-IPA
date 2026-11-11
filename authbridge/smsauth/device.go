@@ -98,7 +98,7 @@ func (c *Client) provision(ctx context.Context) (identity, error) {
 	}
 	conn, _, err := websocket.Dial(ctx, "wss://"+proofHost+"/v3/provisioning_session", &websocket.DialOptions{HTTPClient: c.deviceSocket})
 	if err != nil {
-		return identity{}, &Error{Stage: "SMS_DEVICE_SOCKET"}
+		return identity{}, &Error{Stage: "SMS_DEVICE_SOCKET", cause: err}
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(512 << 10)

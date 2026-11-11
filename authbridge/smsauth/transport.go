@@ -31,11 +31,14 @@ type Error struct {
 	Stage string
 	HTTP  int
 	Code  int
+	cause error
 }
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s (HTTP %d, Apple code %d)", e.Stage, e.HTTP, e.Code)
 }
+
+func (e *Error) Unwrap() error { return e.cause }
 
 type Client struct {
 	apple, device *http.Client
@@ -101,12 +104,12 @@ func request(ctx context.Context, client *http.Client, method, address, host, co
 		if ctx.Err() != nil {
 			return 0, nil, ctx.Err()
 		}
-		return 0, nil, &Error{Stage: stage}
+		return 0, nil, &Error{Stage: stage, cause: err}
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
 	if err != nil || len(data) > 1<<20 {
-		return res.StatusCode, nil, &Error{Stage: stage, HTTP: res.StatusCode}
+		return res.StatusCode, nil, &Error{Stage: stage, HTTP: res.StatusCode, cause: err}
 	}
 	return res.StatusCode, data, nil
 }

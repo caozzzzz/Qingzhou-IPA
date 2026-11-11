@@ -827,7 +827,7 @@ func (r *Runtime) performHTTP(task uint64) {
 		_ = response.Body.Close()
 
 		if err != nil {
-			r.transportError = err
+			r.transportError = fmt.Errorf("read Store HTTP response: %w", err)
 
 			panic("Store HTTP response read failed")
 		}

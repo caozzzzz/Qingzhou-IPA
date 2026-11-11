@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"github.com/majd/ipatool/v2/pkg/appstore"
 	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"io"
@@ -40,6 +41,21 @@ func TestAuthenticationHTTPDiagnosticsNeverExposeResponseDetails(t *testing.T) {
 	code, message = authenticationError(&appstore.AuthenticationFailure{StatusCode: 200, FailureType: "-5000"})
 	if code != "credentials" || !strings.Contains(message, "-5000") {
 		t.Fatal("credential code missing")
+	}
+}
+
+func TestAuthenticationEOFIdentifiesPhaseWithoutPrivateDetails(t *testing.T) {
+	for prefix, phase := range map[string]string{
+		"failed to get bag": "BAG",
+		"failed to initialize SAP action signer: exchange SAP setup message": "SAP_EXCHANGE",
+		"store HTTP transport":     "AUTH_SEND",
+		"read Store HTTP response": "AUTH_READ",
+	} {
+		err := fmt.Errorf("%s: private-endpoint: %w", prefix, &storehttp.TransportError{Err: io.ErrUnexpectedEOF})
+		code, message := authenticationError(err)
+		if code != "auth_transport" || !strings.Contains(message, phase+"；EOF") || strings.Contains(message, "private-") {
+			t.Fatalf("incorrect or unsafe stage diagnostic %s: %s", code, message)
+		}
 	}
 }
 

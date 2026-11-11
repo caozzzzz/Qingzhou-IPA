@@ -21,7 +21,7 @@ func fixtureResponse(status int, body string) *http.Response {
 }
 
 func TestSMSDeliveryAndVerificationUseTheSameTrustedPhone(t *testing.T) {
-	client := New("")
+	client := New("", nil)
 	client.identity = identity{Identifier: make([]byte, 16), Provision: []byte("fixture-device")}
 	client.device.Transport = fixtureTransport(func(req *http.Request) (*http.Response, error) {
 		var body map[string]json.RawMessage
@@ -106,7 +106,7 @@ func TestAppleSMSDeviceSetupLive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 	defer cancel()
-	client := New(t.TempDir())
+	client := New(t.TempDir(), nil)
 	if err := client.loadEndpoints(ctx); err != nil {
 		t.Fatal(err)
 	}

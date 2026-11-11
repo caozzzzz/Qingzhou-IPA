@@ -236,6 +236,7 @@ func (s *Session) phoneRequest(ctx context.Context, method, address, stage strin
 		return 0, phoneReply{}, err
 	}
 	if headers["X-Mme-Device-Id"] != s.deviceID {
+		s.identityToken = ""
 		return 0, phoneReply{}, &Error{Stage: "SMS_EXPIRED"}
 	}
 	for k, v := range appleHeaders() {
@@ -339,10 +340,13 @@ func (s *Session) Verify(ctx context.Context, code string) error {
 		return &Error{Stage: "SMS_VERIFY_LIMIT"}
 	}
 	s.verifyCount++
-	_, _, err := s.phoneRequest(ctx, http.MethodPost, verifyURL, "SMS_VERIFY", map[string]any{
+	status, reply, err := s.phoneRequest(ctx, http.MethodPost, verifyURL, "SMS_VERIFY", map[string]any{
 		"phoneNumber": map[string]int{"id": s.sentPhoneID},
 		"mode":        "sms", "securityCode": map[string]string{"code": code},
 	})
+	if err == nil && (status == http.StatusCreated || (reply.Mode != "" && reply.Mode != "sms")) {
+		return &Error{Stage: "SMS_VERIFY", HTTP: status}
+	}
 	if err == nil {
 		s.identityToken = ""
 	}

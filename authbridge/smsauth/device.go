@@ -98,7 +98,7 @@ func (c *Client) provision(ctx context.Context) (identity, error) {
 	}
 	conn, _, err := websocket.Dial(ctx, "wss://"+proofHost+"/v3/provisioning_session", &websocket.DialOptions{HTTPClient: c.device})
 	if err != nil {
-		return identity{}, &Error{Stage: stage}
+		return identity{}, &Error{Stage: "SMS_DEVICE_SOCKET"}
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(512 << 10)
@@ -121,7 +121,7 @@ func (c *Client) provision(ctx context.Context) (identity, error) {
 				Status gsaStatus `plist:"Status"`
 				Data   string    `plist:"spim"`
 			}
-			err := c.applePlist(ctx, c.endpoints.Start, stage, map[string]any{}, map[string]any{}, id.deviceHeaders(), &start)
+			err := c.applePlist(ctx, c.endpoints.Start, "SMS_DEVICE_START", map[string]any{}, map[string]any{}, id.deviceHeaders(), &start)
 			if err != nil {
 				return identity{}, err
 			}
@@ -138,7 +138,7 @@ func (c *Client) provision(ctx context.Context) (identity, error) {
 				PTM    string    `plist:"ptm"`
 				TK     string    `plist:"tk"`
 			}
-			err := c.applePlist(ctx, c.endpoints.Finish, stage, map[string]any{}, map[string]any{"cpim": message.Client}, id.deviceHeaders(), &finish)
+			err := c.applePlist(ctx, c.endpoints.Finish, "SMS_DEVICE_FINISH", map[string]any{}, map[string]any{"cpim": message.Client}, id.deviceHeaders(), &finish)
 			if err != nil {
 				return identity{}, err
 			}

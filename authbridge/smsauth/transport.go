@@ -44,9 +44,13 @@ type Client struct {
 	endpoints     endpoints
 }
 
-func New(cacheDir string) *Client {
+func New(cacheDir string, appleTransport http.RoundTripper) *Client {
+	apple := isolatedClient()
+	if appleTransport != nil {
+		apple.Transport = appleTransport
+	}
 	return &Client{
-		apple:    isolatedClient(),
+		apple:    apple,
 		device:   isolatedClient(),
 		cacheDir: cacheDir,
 	}
@@ -55,6 +59,8 @@ func New(cacheDir string) *Client {
 func isolatedClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableKeepAlives = true
+	transport.Protocols = new(http.Protocols)
+	transport.Protocols.SetHTTP1(true)
 	return &http.Client{
 		Transport:     transport,
 		Timeout:       20 * time.Second,
@@ -122,6 +128,11 @@ func (c *Client) loadEndpoints(ctx context.Context) error {
 	}
 	const stage = "SMS_CONFIG"
 	status, data, err := request(ctx, c.apple, http.MethodGet, lookupURL, appleHost, "text/x-xml-plist", stage, nil, appleHeaders())
+	// A fresh connection can recover a failed TLS handshake. This lookup
+	// carries no account data and can be repeated without sending a code.
+	if err != nil && ctx.Err() == nil {
+		status, data, err = request(ctx, c.apple, http.MethodGet, lookupURL, appleHost, "text/x-xml-plist", stage, nil, appleHeaders())
+	}
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"qingzhou.local/authbridge/smsauth"
 )
 
@@ -55,7 +56,7 @@ func (b *bridge) handleSMS(in request, out response) response {
 				return smsFailure(out, &smsauth.Error{Stage: "SMS_CREDENTIALS"})
 			}
 			if b.smsClient == nil {
-				b.smsClient = smsauth.New(os.Getenv("QINGZHOU_CACHE_DIR"))
+				b.smsClient = smsauth.New(os.Getenv("QINGZHOU_CACHE_DIR"), storehttp.AuthenticationRoundTripper(nil))
 			}
 			session, err := b.smsClient.Begin(ctx, b.storeChallenge.email, in.Password, b.storeChallenge.expires)
 			if err != nil {
@@ -97,7 +98,7 @@ func smsFailure(out response, err error) response {
 		out.Error = "请重新输入 Apple 账户密码。"
 	case "SMS_CONFIG":
 		out.Error = "无法获取 Apple 短信验证配置。"
-	case "SMS_DEVICE_PROVISION", "SMS_DEVICE_PROOF":
+	case "SMS_DEVICE_SOCKET", "SMS_DEVICE_PROVISION", "SMS_DEVICE_START", "SMS_DEVICE_FINISH", "SMS_DEVICE_PROOF":
 		out.Error = "短信验证所需的设备证明未准备完成。"
 	case "SMS_CHALLENGE":
 		out.Error = "Apple 没有为这次登录提供可用的双重验证会话。"

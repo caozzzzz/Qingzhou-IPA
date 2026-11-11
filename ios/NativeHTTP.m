@@ -24,7 +24,8 @@ char *QZNativeHTTP(const char *requestJSON) {
         NSTimeInterval timeout = MIN(30, MAX(0.1, [values[@"timeout"] doubleValue]));
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:timeout];
         request.HTTPMethod = values[@"method"];
-        request.HTTPBody = [[NSData alloc] initWithBase64EncodedString:[values[@"body"] isKindOfClass:NSString.class] ? values[@"body"] : @"" options:0];
+        NSData *body = [[NSData alloc] initWithBase64EncodedString:[values[@"body"] isKindOfClass:NSString.class] ? values[@"body"] : @"" options:0];
+        if (body.length > 0) request.HTTPBody = body;
         request.HTTPShouldHandleCookies = NO;
         [values[@"headers"] enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSArray *items, BOOL *stop) {
             if ([key caseInsensitiveCompare:@"Content-Length"] != NSOrderedSame) {

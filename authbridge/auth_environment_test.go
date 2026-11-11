@@ -2,11 +2,13 @@ package main
 
 import (
 	"errors"
-	"github.com/majd/ipatool/v2/pkg/appstore"
-	storehttp "github.com/majd/ipatool/v2/pkg/http"
 	"io"
+	"net"
 	"strings"
 	"testing"
+
+	"github.com/majd/ipatool/v2/pkg/appstore"
+	storehttp "github.com/majd/ipatool/v2/pkg/http"
 )
 
 func TestAuthenticationEnvironmentErrorsAreClassifiedWithoutDetails(t *testing.T) {
@@ -21,6 +23,27 @@ func TestAuthenticationEnvironmentErrorsAreClassifiedWithoutDetails(t *testing.T
 		code, message := authenticationError(errors.New(detail))
 		if code != want || strings.Contains(message, "private-") {
 			t.Fatalf("unexpected public error %s: %s", code, message)
+		}
+	}
+}
+
+func TestAuthenticationStagesKeepWireAndFrameworkErrorsDistinct(t *testing.T) {
+	cases := []struct {
+		cause error
+		code  string
+		label string
+	}{
+		{&storehttp.AuthenticationWireError{Err: &storehttp.NativeAuthenticationNetworkError{Code: 54, Domain: "NSPOSIXErrorDomain"}}, "auth_transport", "HTTP_SEND；POSIX 54"},
+		{&storehttp.AuthenticationWireError{Err: &net.DNSError{Name: "private-host"}}, "auth_transport", "HTTP_SEND；DNS"},
+		{&storehttp.AuthenticationWireError{ReadingResponse: true, Err: io.ErrUnexpectedEOF}, "auth_transport", "HTTP_READ；EOF"},
+		{&storehttp.AuthenticationFrameworkError{Err: errors.New("guest panic: private-detail")}, "auth_framework", "STORE_REQUEST"},
+		{&storehttp.AuthenticationFrameworkError{Err: errors.New("sign Store request: private-detail")}, "auth_signing", "SAP_SIGN"},
+		{&storehttp.AuthenticationFrameworkError{Err: errors.New("STORE_PROOF; stage=DEVICE_OTP; private-detail")}, "auth_device", "DEVICE_OTP"},
+	}
+	for _, c := range cases {
+		code, message := authenticationError(&storehttp.TransportError{Err: c.cause})
+		if code != c.code || !strings.Contains(message, c.label) || strings.Contains(message, "private-") {
+			t.Fatalf("unexpected authentication diagnostic: %s (%s)", code, message)
 		}
 	}
 }

@@ -206,6 +206,10 @@ func (b *Backend) execute(ctx context.Context, input emulator.Request) (*http.Re
 
 	response, err := guest.Execute(input)
 	if err != nil {
+		var wireError *apphttp.AuthenticationWireError
+		if input.Operation == "authenticate" && !errors.As(err, &wireError) {
+			err = &apphttp.AuthenticationFrameworkError{Err: err}
+		}
 		return nil, fmt.Errorf("store request: %w", err)
 	}
 
@@ -296,6 +300,9 @@ func (b *Backend) requestTransport(input emulator.Request) func(*http.Request) (
 				}
 			}
 			response, err := client.Do(current)
+			if err != nil && input.Operation == "authenticate" {
+				return nil, &apphttp.AuthenticationWireError{Err: err}
+			}
 			if err == nil && b.jar != nil {
 				// SP/RP replies can set cookies required by the replay too.
 				b.jar.SetCookies(current.URL, response.Cookies())

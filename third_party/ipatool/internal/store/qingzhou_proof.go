@@ -73,7 +73,10 @@ func sendWithMachineProof(request *http.Request, guid string, send func(*http.Re
 			data, e := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
 			_ = res.Body.Close()
 			res.Body = io.NopCloser(bytes.NewReader(data))
-			if e != nil || len(data) > 2<<20 {
+			if e != nil {
+				return nil, &apphttp.AuthenticationWireError{ReadingResponse: true, Err: e}
+			}
+			if len(data) > 2<<20 {
 				return nil, errors.New("Store authentication response unreadable")
 			}
 			var raw map[string]any

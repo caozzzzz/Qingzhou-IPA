@@ -431,6 +431,7 @@ func (t *appstore) loginRequest(email, password, authCode, guid, endpoint string
 		NoRedirects:    true,
 		Headers: map[string]string{
 			"Content-Type": "application/x-apple-plist",
+			"User-Agent":   http.AuthenticationUserAgent,
 		},
 		Payload: &http.XMLPayload{
 			Content: map[string]interface{}{

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,6 +248,37 @@ func authenticationContext(err error) string {
 	return strings.Join(parts, "；") + "。"
 }
 
+func authenticationNetworkReason(err error) string {
+	var nativeError *storehttp.NativeAuthenticationNetworkError
+	if errors.As(err, &nativeError) {
+		return nativeError.Diagnostic()
+	}
+	if errors.Is(err, context.Canceled) {
+		return "CANCELLED"
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "EOF"
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return "TIMEOUT"
+	}
+	var dnsError *net.DNSError
+	if errors.As(err, &dnsError) {
+		return "DNS"
+	}
+	var certificateError *tls.CertificateVerificationError
+	var tlsError tls.RecordHeaderError
+	if errors.As(err, &certificateError) || errors.As(err, &tlsError) {
+		return "TLS"
+	}
+	var operationError *net.OpError
+	if errors.As(err, &operationError) && operationError.Op == "dial" {
+		return "CONNECT"
+	}
+	return "NETWORK"
+}
+
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
 	message := strings.ToLower(err.Error())
@@ -283,21 +315,30 @@ func authenticationError(err error) (string, string) {
 		}
 	}
 	var failure *appstore.AuthenticationFailure
+	var wireError *storehttp.AuthenticationWireError
+	if errors.As(err, &wireError) {
+		stage := "HTTP_SEND"
+		if wireError.ReadingResponse {
+			stage = "HTTP_READ"
+		}
+		return "auth_transport", fmt.Sprintf("连接 Apple 登录接口时中断（%s；%s）。%s", stage, authenticationNetworkReason(err), authenticationContext(err))
+	}
+	var frameworkError *storehttp.AuthenticationFrameworkError
+	switch {
+	case strings.Contains(message, "sign store request"):
+		return "auth_signing", "本机生成 Apple 登录签名失败（SAP_SIGN）。"
+	case strings.Contains(message, "prepare store framework"), strings.Contains(message, "open store framework"):
+		return "auth_framework", "本机加载 Apple 登录组件失败（STORE_SETUP）。"
+	case errors.As(err, &frameworkError):
+		return "auth_framework", "本机处理 Apple 登录请求失败（STORE_REQUEST）。" + authenticationContext(err)
+	}
 	var transportError *storehttp.TransportError
 	if errors.As(err, &transportError) {
-		reason := "NETWORK"
-		var nativeError *storehttp.NativeAuthenticationNetworkError
-		if errors.As(err, &nativeError) && nativeError.Code < 0 && nativeError.Code >= -2000 {
-			reason = fmt.Sprintf("URLSession %d", nativeError.Code)
+		reason := authenticationNetworkReason(err)
+		if reason == "NETWORK" {
+			return "auth_request", "处理 Apple 登录请求失败（AUTH_REQUEST）。" + authenticationContext(err)
 		}
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			reason = "EOF"
-		}
-		var networkError net.Error
-		if errors.As(err, &networkError) && networkError.Timeout() {
-			reason = "TIMEOUT"
-		}
-		return "auth_transport", fmt.Sprintf("连接 Apple 登录接口时中断（%s）。认证环境通过不代表登录连接也通过，可切换 Wi-Fi／蜂窝网络后对照此错误码。", reason)
+		return "auth_transport", fmt.Sprintf("连接 Apple 登录接口时中断（%s）。%s", reason, authenticationContext(err))
 	}
 	if errors.As(err, &failure) {
 		if failure.Disabled {
@@ -353,12 +394,21 @@ func (b *bridge) handle(in request) response {
 	case "smsPrepare", "smsSend", "smsCancel":
 		return b.handleSMS(in, out)
 	case "checkAuth":
-		if err := appstore.QingzhouCheckAuthentication(b.store); err != nil {
-			out.ErrorCode, out.Error = authenticationError(err)
+		status, probeErr, setupErr := appstore.QingzhouCheckAuthentication(in.operationContext(), b.store, in.Transport)
+		if setupErr != nil {
+			out.ErrorCode, out.Error = authenticationError(setupErr)
 			return out
 		}
+		channel := "系统通道"
+		if in.Transport == storehttp.AuthenticationTransportGo {
+			channel = "Go 通道"
+		}
+		probe := fmt.Sprintf("%s收到 Apple 入口响应（HTTP %d）。", channel, status)
+		if probeErr != nil {
+			probe = fmt.Sprintf("%s未收到 Apple 入口响应（%s）。", channel, authenticationNetworkReason(probeErr))
+		}
 		out.OK = true
-		out.Data = map[string]string{"message": "Apple 动态配置、SAP 签名和本地设备验证组件检查通过。此检查不代表账号已登录，也未使用账号或密码。"}
+		out.Data = map[string]string{"message": "Apple 配置、SAP 签名和本地设备验证检查通过。" + probe + "此次检查未提交账号或密码。"}
 		return out
 	case "search":
 		data, err := catalogSearch(in.Query, in.Country, in.Platform)

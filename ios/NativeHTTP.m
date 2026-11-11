@@ -44,7 +44,11 @@ char *QZNativeHTTP(const char *requestJSON) {
         NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             NSDictionary *completed;
             if (error || ![response isKindOfClass:NSHTTPURLResponse.class]) {
-                completed = @{@"errorCode": @(error ? error.code : -1011)};
+                NSString *domain = error.domain ?: NSURLErrorDomain;
+                if (![@[NSURLErrorDomain, NSPOSIXErrorDomain, NSOSStatusErrorDomain, @"kCFErrorDomainCFNetwork"] containsObject:domain]) {
+                    domain = @"other";
+                }
+                completed = @{@"errorCode": @(error ? error.code : -1011), @"errorDomain": domain};
             } else if (data.length > 2 * 1024 * 1024) {
                 completed = @{@"errorCode": @(-1103)};
             } else {

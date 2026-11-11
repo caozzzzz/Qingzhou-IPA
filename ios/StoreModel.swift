@@ -28,6 +28,9 @@ private struct PendingStoreLogin {
     @Published var smsPhoneID = 0
     @Published var accountMessage = ""
     @Published var environmentMessage = ""
+    @Published var loginTransport = UserDefaults.standard.string(forKey: "loginTransport") == "go" ? "go" : "native" {
+        didSet { UserDefaults.standard.set(loginTransport, forKey: "loginTransport") }
+    }
     @Published var searchMessage = ""
     @Published var searching = false
     @Published var apps: [CatalogApp] = []
@@ -161,7 +164,7 @@ private struct PendingStoreLogin {
         let generation = authenticationGeneration
         let result = await auth.request(base("login", [
             "email": login.email, "password": login.password, "code": code,
-            "attempt": login.attempt, "useSMS": useSMS, "transport": "native", "pathMode": "native"
+            "attempt": login.attempt, "useSMS": useSMS, "transport": loginTransport, "pathMode": "native"
         ]))
         guard generation == authenticationGeneration else { return }
         accountBusy = false
@@ -204,9 +207,9 @@ private struct PendingStoreLogin {
     func checkEnvironment() async {
         guard !accountBusy else { return }
         let previousLoginMessage = accountMessage
-        accountBusy = true; accountMessage = "正在检查 Apple 配置、SAP 签名与设备验证组件，首次检查可能需要几分钟…"
+        accountBusy = true; accountMessage = "正在检查认证组件和 Apple 登录连接，首次检查可能需要几分钟…"
         let generation = authenticationGeneration
-        let result = await auth.request(base("checkAuth"))
+        let result = await auth.request(base("checkAuth", ["transport": loginTransport]))
         guard generation == authenticationGeneration else { return }; accountBusy = false
         environmentMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
         accountMessage = previousLoginMessage

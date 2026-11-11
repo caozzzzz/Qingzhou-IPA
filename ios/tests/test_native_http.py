@@ -61,6 +61,7 @@ with tempfile.TemporaryDirectory() as temp:
     threading.Thread(target=tls.serve_forever,daemon=True).start()
     result=run("/echo",url=f"https://127.0.0.1:{tls.server_port}/echo")
     assert result.get("errorCode",0)!=0 and "status" not in result
+    assert result["errorDomain"] in {"NSURLErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain", "kCFErrorDomainCFNetwork", "other"}
     tls.shutdown()
 server.shutdown()
 print("URLSession fixtures passed: signed POST/body, redirect interception, missing Location, cookies, session isolation, gzip decoding, TLS rejection")

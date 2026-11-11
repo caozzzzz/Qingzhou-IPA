@@ -1,8 +1,8 @@
-# 轻舟 IPA iOS 0.4.2
+# 轻舟 IPA iOS 0.4.3
 
 ## 短信验证预览
 
-进入六位验证码页面后，点击“使用短信验证码”。轻舟向 Apple 获取账号的受信任手机号尾号，可选择号码并请求短信。Apple 受理请求后，输入收到的验证码。验证通过后，轻舟继续完成 App Store 登录，取得商店会话后才显示登录成功。
+填写账号和密码后，可从账户页直接点“使用短信验证码”。六位设备验证码页面也提供同一入口。轻舟向 Apple 获取账号的受信任手机号尾号，可选择号码并请求短信。Apple 受理请求后，输入收到的验证码。验证通过后，轻舟继续完成 App Store 登录，取得商店会话后才显示登录成功。
 
 短信发码参考 [SideInstaller 的 GrandSlam 流程](https://github.com/FrizzleM/SideInstaller/blob/4504b3cf2b0123f3ceb2d55f13a202f0cfec839e/ish/sideinstaller.py) 和 [SideSign 的短信认证实现](https://github.com/SideStore/SideSign/pull/8)。短信功能使用 SideStore 的设备证明服务，提交随机设备标识和设备注册数据。设备证明保存在应用缓存目录。账号认证材料和验证码提交给 Apple。用户可在验证码页面切换回设备验证码。
 
@@ -22,7 +22,7 @@
 
 IPA 为 arm64，最低 iOS 16。通过 LiveContainer 导入，或使用自己的有效证书重签名安装；构建的临时签名不能用于普通设备直接安装。
 
-先确认账户页显示 **0.4.2**，点击“检查登录环境”，再使用自己的账号登录并验证一款已获许可的免费应用下载。首次需要联网下载并校验 SAP 组件，并初始化设备验证，请保持应用在前台。若系统通道连接失败，在账户页展开“登录网络”，选择 Go 通道后重新检查或登录。失败后可复制脱敏检查结果。
+先确认账户页显示 **0.4.3**，点击“检查登录环境”，再使用自己的账号登录并验证一款已获许可的免费应用下载。普通登录使用 0.4.0 的 App Store 后端。首次需要联网下载并校验 SAP 组件，并初始化设备验证，请保持应用在前台。失败后可复制脱敏检查结果。
 
 本版的自动化验证不使用真实账号。Apple 账户认证、双重验证、购买许可、历史版本可用性及最终 IPA 下载，仍需在目标手机确认。没有绕过付费应用购买许可的功能。
 
@@ -46,4 +46,4 @@ python3 ios/tests/test_native_http.py
 bash ios/build-ipa.sh
 ```
 
-安装包位于 `dist/Qingzhou-IPA-iOS-0.4.2-NoJIT-arm64.ipa`。GitHub Actions 还运行 SAP、商店框架、HTTP 与应用商店适配测试，检查 IPA 结构和临时签名。WebKit 测试验证实际引擎加载 WASM、同源限制和空设备状态。
+安装包位于 `dist/Qingzhou-IPA-iOS-0.4.3-NoJIT-arm64.ipa`。GitHub Actions 还运行 SAP、商店框架、HTTP 与应用商店适配测试，检查 IPA 结构和临时签名。WebKit 测试验证实际引擎加载 WASM、同源限制和空设备状态。

@@ -96,7 +96,7 @@ func (c *Client) provision(ctx context.Context) (identity, error) {
 	if _, err := rand.Read(id.Identifier); err != nil {
 		return identity{}, &Error{Stage: stage}
 	}
-	conn, _, err := websocket.Dial(ctx, "wss://"+proofHost+"/v3/provisioning_session", &websocket.DialOptions{HTTPClient: c.device})
+	conn, _, err := websocket.Dial(ctx, "wss://"+proofHost+"/v3/provisioning_session", &websocket.DialOptions{HTTPClient: c.deviceSocket})
 	if err != nil {
 		return identity{}, &Error{Stage: "SMS_DEVICE_SOCKET"}
 	}

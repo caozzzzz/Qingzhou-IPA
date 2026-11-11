@@ -44,13 +44,25 @@ func (b *bridge) handleSMS(in request, out response) response {
 		out.OK = true
 		return out
 	}
+	start := in.Action == "smsStart"
+	if start {
+		email := strings.TrimSpace(in.Email)
+		if runtime.GOOS != "ios" || !validSMSAttempt(in.Attempt) || email == "" || len(email) > 320 {
+			return smsFailure(out, &smsauth.Error{Stage: "SMS_EXPIRED"})
+		}
+		if in.Password == "" || len(in.Password) > 4096 {
+			return smsFailure(out, &smsauth.Error{Stage: "SMS_CREDENTIALS"})
+		}
+		b.clearStoreChallenge()
+		b.storeChallenge = &storeChallenge{email: email, attempt: in.Attempt, expires: time.Now().Add(5 * time.Minute)}
+	}
 	if !b.matchesStoreChallenge(in) {
 		return smsFailure(out, &smsauth.Error{Stage: "SMS_EXPIRED"})
 	}
 	ctx, cancel := context.WithTimeout(in.operationContext(), 110*time.Second)
 	defer cancel()
 	switch in.Action {
-	case "smsPrepare":
+	case "smsStart", "smsPrepare":
 		if !b.sms.Active() {
 			if in.Password == "" || len(in.Password) > 4096 {
 				return smsFailure(out, &smsauth.Error{Stage: "SMS_CREDENTIALS"})
@@ -60,6 +72,9 @@ func (b *bridge) handleSMS(in request, out response) response {
 			}
 			session, err := b.smsClient.Begin(ctx, b.storeChallenge.email, in.Password, b.storeChallenge.expires)
 			if err != nil {
+				if start {
+					b.clearStoreChallenge()
+				}
 				return smsFailure(out, err)
 			}
 			b.sms = session

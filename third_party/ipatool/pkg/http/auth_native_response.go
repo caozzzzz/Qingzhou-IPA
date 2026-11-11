@@ -12,36 +12,13 @@ import (
 	"time"
 )
 
-// NativeAuthenticationNetworkError exposes a bounded diagnostic for URLSession.
-type NativeAuthenticationNetworkError struct {
-	Code   int
-	Domain string
-}
+// NativeAuthenticationNetworkError exposes only URLSession's numeric error code.
+type NativeAuthenticationNetworkError struct{ Code int }
 
 func (e *NativeAuthenticationNetworkError) Error() string {
-	return "native authentication network error (" + e.Diagnostic() + ")"
+	return fmt.Sprintf("native authentication network error (URLSession %d)", e.Code)
 }
-
-func (e *NativeAuthenticationNetworkError) Diagnostic() string {
-	if e.Code < -100000 || e.Code > 100000 {
-		return "URLSession"
-	}
-	switch e.Domain {
-	case "", "NSURLErrorDomain":
-		return fmt.Sprintf("URLSession %d", e.Code)
-	case "NSPOSIXErrorDomain":
-		return fmt.Sprintf("POSIX %d", e.Code)
-	case "NSOSStatusErrorDomain":
-		return fmt.Sprintf("OSStatus %d", e.Code)
-	case "kCFErrorDomainCFNetwork":
-		return fmt.Sprintf("CFNetwork %d", e.Code)
-	default:
-		return "URLSession"
-	}
-}
-func (e *NativeAuthenticationNetworkError) Timeout() bool {
-	return (e.Domain == "" || e.Domain == "NSURLErrorDomain") && e.Code == -1001
-}
+func (e *NativeAuthenticationNetworkError) Timeout() bool   { return e.Code == -1001 }
 func (e *NativeAuthenticationNetworkError) Temporary() bool { return false }
 
 // Decode only inside the trusted bridge; never include wire data in errors.
@@ -51,7 +28,6 @@ func decodeNativeAuthResponse(data []byte, req *http.Request) (*http.Response, e
 		Headers   http.Header `json:"headers"`
 		Body      []byte      `json:"body"`
 		ErrorCode int         `json:"errorCode"`
-		Domain    string      `json:"errorDomain"`
 		Cookies   []struct {
 			Name     string
 			Value    string
@@ -66,7 +42,7 @@ func decodeNativeAuthResponse(data []byte, req *http.Request) (*http.Response, e
 		return nil, errors.New("invalid native authentication response")
 	}
 	if result.ErrorCode != 0 {
-		return nil, &NativeAuthenticationNetworkError{Code: result.ErrorCode, Domain: result.Domain}
+		return nil, &NativeAuthenticationNetworkError{Code: result.ErrorCode}
 	}
 	if result.Status < 100 || result.Status > 599 {
 		return nil, errors.New("invalid native authentication HTTP status")

@@ -28,9 +28,6 @@ private struct PendingStoreLogin {
     @Published var smsPhoneID = 0
     @Published var accountMessage = ""
     @Published var environmentMessage = ""
-    @Published var loginTransport = UserDefaults.standard.string(forKey: "loginTransport") == "go" ? "go" : "native" {
-        didSet { UserDefaults.standard.set(loginTransport, forKey: "loginTransport") }
-    }
     @Published var searchMessage = ""
     @Published var searching = false
     @Published var apps: [CatalogApp] = []
@@ -110,6 +107,15 @@ private struct PendingStoreLogin {
         guard !accountBusy, let login = currentChallenge() else { return }
         await performSMS("smsPrepare", login: login, fields: ["password": login.password], progress: "正在获取受信任手机号…")
     }
+    func startSMS(email: String, password: String, remember: Bool) async {
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !accountBusy, account == nil, !email.isEmpty, !password.isEmpty else { return }
+        let login = PendingStoreLogin(email: email, password: password, remember: remember,
+                                      attempt: UUID().uuidString, expires: Date().addingTimeInterval(300))
+        smsVerification = nil
+        pending = login
+        await performSMS("smsStart", login: login, fields: ["password": password], progress: "正在获取受信任手机号…")
+    }
     func sendSMS() async {
         guard !accountBusy, smsPhoneID > 0, let login = currentChallenge() else { return }
         await performSMS("smsSend", login: login, fields: ["phoneID": smsPhoneID], progress: "正在请求 Apple 发送短信…")
@@ -148,8 +154,12 @@ private struct PendingStoreLogin {
         accountBusy = false
         applySMSState(result)
         guard result["ok"] as? Bool == true else {
+            if action == "smsStart" { pending = nil }
             accountMessage = text(result["error"])
             return
+        }
+        if action == "smsStart" {
+            waitForCode(login)
         }
         if let state = smsVerification, let sentID = state.sentPhoneID,
            let phone = state.phones.first(where: { $0.id == sentID }) {
@@ -158,31 +168,35 @@ private struct PendingStoreLogin {
             accountMessage = "选择受信任手机号后，点击发送短信。"
         }
     }
+    private func waitForCode(_ login: PendingStoreLogin) {
+        pending = login
+        needsCode = true
+        let seconds = max(0, login.expires.timeIntervalSinceNow)
+        let attempt = login.attempt
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if let challenge = pending, challenge.attempt == attempt, challenge.expires <= Date() {
+                cancelLogin()
+                accountMessage = "验证等待已过期，请重新登录。"
+            }
+        }
+    }
     private func authenticate(_ login: PendingStoreLogin, code: String, useSMS: Bool) async {
         accountBusy = true
         accountMessage = useSMS ? "正在验证短信并登录 App Store…" : "正在连接 Apple…"
         let generation = authenticationGeneration
         let result = await auth.request(base("login", [
             "email": login.email, "password": login.password, "code": code,
-            "attempt": login.attempt, "useSMS": useSMS, "transport": loginTransport, "pathMode": "native"
+            "attempt": login.attempt, "useSMS": useSMS, "transport": "native", "pathMode": "native"
         ]))
         guard generation == authenticationGeneration else { return }
         accountBusy = false
         if result["need2FA"] as? Bool == true {
-            pending = PendingStoreLogin(
+            waitForCode(PendingStoreLogin(
                 email: login.email, password: login.password, remember: login.remember,
                 attempt: login.attempt, expires: Date().addingTimeInterval(300)
-            )
-            needsCode = true
+            ))
             accountMessage = "输入受信任设备的验证码，或选择使用短信验证码。"
-            let attempt = login.attempt
-            Task {
-                try? await Task.sleep(nanoseconds: 300_000_000_000)
-                if let challenge = pending, challenge.attempt == attempt, challenge.expires <= Date() {
-                    cancelLogin()
-                    accountMessage = "验证等待已过期，请重新登录。"
-                }
-            }
             return
         }
         guard result["ok"] as? Bool == true, let user = result["account"] as? JSON, var saved = result["session"] as? JSON else {
@@ -207,9 +221,9 @@ private struct PendingStoreLogin {
     func checkEnvironment() async {
         guard !accountBusy else { return }
         let previousLoginMessage = accountMessage
-        accountBusy = true; accountMessage = "正在检查认证组件和 Apple 登录连接，首次检查可能需要几分钟…"
+        accountBusy = true; accountMessage = "正在检查 Apple 配置、SAP 签名与设备验证组件，首次检查可能需要几分钟…"
         let generation = authenticationGeneration
-        let result = await auth.request(base("checkAuth", ["transport": loginTransport]))
+        let result = await auth.request(base("checkAuth"))
         guard generation == authenticationGeneration else { return }; accountBusy = false
         environmentMessage = result["ok"] as? Bool == true ? text((result["data"] as? JSON)?["message"]) : text(result["error"])
         accountMessage = previousLoginMessage

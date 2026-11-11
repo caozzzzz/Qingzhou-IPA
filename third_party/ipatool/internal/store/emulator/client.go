@@ -37,14 +37,11 @@ func (r *Runtime) Execute(input Request) (response *http.Response, err error) {
 			err = recoveredError("Store request preparation", failure)
 		}
 
-		// The guest can panic while dispatching a transport error. Preserve
-		// the original cause instead of reporting the guest's generic panic.
-		if r.transportError != nil {
-			response, err = nil, r.transportError
-		} else if r.authRequest && r.ctx != nil && r.ctx.Err() != nil {
-			response, err = nil, r.ctx.Err()
-		} else if raw := r.authenticationHTTPResponse(); raw != nil {
-			response, err = raw, nil
+		if err != nil {
+			if raw, ok := r.recoverAuthenticationDialog(err); ok {
+				response = raw
+				err = nil
+			}
 		}
 		if err != nil && r.lastResponse != nil && r.streamResponse {
 			_ = r.lastResponse.Body.Close()
@@ -212,10 +209,6 @@ func (r *Runtime) Execute(input Request) (response *http.Response, err error) {
 
 	if r.transportError != nil {
 		return nil, r.transportError
-	}
-
-	if raw := r.authenticationHTTPResponse(); raw != nil {
-		return raw, nil
 	}
 
 	if requestErr != nil {

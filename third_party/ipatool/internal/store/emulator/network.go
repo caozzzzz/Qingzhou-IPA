@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/majd/ipatool/v2/internal/sap/unicorn"
-	apphttp "github.com/majd/ipatool/v2/pkg/http"
 	"howett.net/plist"
 )
 
@@ -828,9 +827,6 @@ func (r *Runtime) performHTTP(task uint64) {
 		_ = response.Body.Close()
 
 		if err != nil {
-			if r.authRequest {
-				err = &apphttp.AuthenticationWireError{ReadingResponse: true, Err: err}
-			}
 			r.transportError = err
 
 			panic("Store HTTP response read failed")

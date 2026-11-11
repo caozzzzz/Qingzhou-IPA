@@ -39,28 +39,32 @@ func (e *Error) Error() string {
 
 type Client struct {
 	apple, device *http.Client
+	deviceSocket  *http.Client
 	cacheDir      string
 	identity      identity
 	endpoints     endpoints
 }
 
 func New(cacheDir string, appleTransport http.RoundTripper) *Client {
-	apple := isolatedClient()
+	apple, device := isolatedClient(), isolatedClient()
 	if appleTransport != nil {
 		apple.Transport = appleTransport
+		device.Transport = appleTransport
 	}
+	socket := isolatedClient()
+	socket.Transport.(*http.Transport).Protocols = &http.Protocols{}
+	socket.Transport.(*http.Transport).Protocols.SetHTTP1(true)
 	return &Client{
-		apple:    apple,
-		device:   isolatedClient(),
-		cacheDir: cacheDir,
+		apple:        apple,
+		device:       device,
+		deviceSocket: socket,
+		cacheDir:     cacheDir,
 	}
 }
 
 func isolatedClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableKeepAlives = true
-	transport.Protocols = new(http.Protocols)
-	transport.Protocols.SetHTTP1(true)
 	return &http.Client{
 		Transport:     transport,
 		Timeout:       20 * time.Second,

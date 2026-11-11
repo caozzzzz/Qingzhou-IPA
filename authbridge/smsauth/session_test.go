@@ -38,7 +38,7 @@ func TestSMSDeliveryAndVerificationUseTheSameTrustedPhone(t *testing.T) {
 		}
 		switch req.URL.Path {
 		case "/auth":
-			return fixtureResponse(200, `{"trustedPhoneNumbers":[{"id":7,"numberWithDialCode":"+1 555 000 1283"},{"id":"9","lastTwoDigits":"51"}]}`), nil
+			return fixtureResponse(200, `{"trustedPhoneNumbers":[{"id":7,"numberWithDialCode":"+1 555 000 1283"},{"id":"9","lastTwoDigits":"51"},{"id":10,"lastTwoDigits":"19","pushMode":"voice"}]}`), nil
 		case "/auth/verify/phone", "/auth/verify/phone/securitycode":
 			var body struct {
 				Phone struct{ ID int } `json:"phoneNumber"`

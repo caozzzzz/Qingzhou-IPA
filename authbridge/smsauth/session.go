@@ -142,22 +142,32 @@ type phoneRecord struct {
 	Last   string          `json:"lastTwoDigits"`
 	Number string          `json:"numberWithDialCode"`
 	Masked string          `json:"obfuscatedNumber"`
+	Mode   string          `json:"pushMode"`
 }
 
 type phoneReply struct {
-	Trusted []phoneRecord     `json:"trustedPhoneNumbers"`
-	Numbers []phoneRecord     `json:"phoneNumbers"`
-	Phone   *phoneRecord      `json:"phoneNumber"`
-	Errors  []json.RawMessage `json:"serviceErrors"`
-	Other   []json.RawMessage `json:"errors"`
-	Success *bool             `json:"success"`
-	Code    int               `json:"ec"`
-	Status  struct {
+	Trusted      []phoneRecord     `json:"trustedPhoneNumbers"`
+	Numbers      []phoneRecord     `json:"phoneNumbers"`
+	Phone        *phoneRecord      `json:"phoneNumber"`
+	Errors       []json.RawMessage `json:"serviceErrors"`
+	Other        []json.RawMessage `json:"errors"`
+	Success      *bool             `json:"success"`
+	Code         int               `json:"ec"`
+	Mode         string            `json:"mode"`
+	SecurityCode struct {
+		SentLimit   bool `json:"tooManyCodesSent"`
+		VerifyLimit bool `json:"tooManyCodesValidated"`
+		Locked      bool `json:"securityCodeLocked"`
+	} `json:"securityCode"`
+	Status struct {
 		Code int `json:"ec"`
 	} `json:"Status"`
 }
 
 func (p phoneRecord) sanitized() (Phone, bool) {
+	if p.Mode == "voice" {
+		return Phone{}, false
+	}
 	id, err := strconv.Atoi(strings.Trim(string(p.ID), "\""))
 	if err != nil || id <= 0 || id > 1_000_000 {
 		return Phone{}, false
@@ -205,6 +215,12 @@ func parsePhoneReply(data []byte, status int, stage string) (phoneReply, error) 
 			code = reply.Status.Code
 		}
 		return reply, &Error{Stage: stage, HTTP: status, Code: code}
+	}
+	if stage == "SMS_SEND" && (reply.SecurityCode.SentLimit || reply.SecurityCode.Locked) {
+		return reply, &Error{Stage: "SMS_SEND_LIMIT", HTTP: status}
+	}
+	if stage == "SMS_VERIFY" && (reply.SecurityCode.VerifyLimit || reply.SecurityCode.Locked) {
+		return reply, &Error{Stage: "SMS_VERIFY_LIMIT", HTTP: status}
 	}
 	return reply, nil
 }
@@ -259,15 +275,18 @@ func (s *Session) loadPhones(ctx context.Context) error {
 	if len(s.phones) == 0 {
 		return &Error{Stage: stage, HTTP: status}
 	}
-	// HTTP 201 on this endpoint means Apple already initiated delivery.
+	// HTTP 201 can mean that Apple initiated SMS or voice delivery.
 	if status == http.StatusCreated {
-		first, ok := phones[0].sanitized()
-		if !ok {
-			return &Error{Stage: stage, HTTP: status}
+		first := phones[0]
+		mode := reply.Mode
+		if mode == "" {
+			mode = first.Mode
 		}
-		s.sentPhoneID = first.ID
-		s.nextSend = time.Now().Add(resendDelay)
-		s.sendAttempts = 1
+		if phone, ok := first.sanitized(); ok && mode == "sms" {
+			s.sentPhoneID = phone.ID
+			s.nextSend = time.Now().Add(resendDelay)
+			s.sendAttempts = 1
+		}
 	}
 	return nil
 }
@@ -294,9 +313,18 @@ func (s *Session) Send(ctx context.Context, phoneID int) error {
 	}
 	s.sendAttempts++
 	s.nextSend = time.Now().Add(resendDelay)
-	_, _, err := s.phoneRequest(ctx, http.MethodPut, smsURL, "SMS_SEND", map[string]any{
+	status, reply, err := s.phoneRequest(ctx, http.MethodPut, smsURL, "SMS_SEND", map[string]any{
 		"phoneNumber": map[string]int{"id": phoneID}, "mode": "sms",
 	})
+	if err == nil && reply.Mode != "" && reply.Mode != "sms" {
+		return &Error{Stage: "SMS_SEND", HTTP: status}
+	}
+	if err == nil && reply.Phone != nil {
+		id, idErr := strconv.Atoi(strings.Trim(string(reply.Phone.ID), "\""))
+		if idErr == nil && id != phoneID {
+			return &Error{Stage: "SMS_SEND", HTTP: status}
+		}
+	}
 	if err == nil {
 		s.sentPhoneID = phoneID
 	}

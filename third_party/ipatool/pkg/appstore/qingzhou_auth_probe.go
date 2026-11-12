@@ -31,7 +31,7 @@ func QingzhouCheckAuthentication(ctx context.Context, client AppStore, mode stri
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to get bag: %w", err)
 	}
-	signer, err := t.actionSignerFactory(bag.SAPConfig, machineID)
+	signer, err := t.actionSignerFactory(ctx, bag.SAPConfig, machineID)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to initialize SAP action signer: %w", err)
 	}

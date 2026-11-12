@@ -1,6 +1,7 @@
 package appstore
 
 import (
+	"context"
 	"time"
 
 	"github.com/majd/ipatool/v2/internal/store"
@@ -53,7 +54,7 @@ type appstore struct {
 	ownedAppsClient     http.Client[[]byte]
 	httpClient          http.Client[interface{}]
 	macDecrypterFactory macPackageDecrypterFactory
-	actionSignerFactory ActionSignerFactory
+	actionSignerFactory contextActionSignerFactory
 	authRetrySleep      func(time.Duration)
 	machine             machine.Machine
 	os                  operatingsystem.OperatingSystem
@@ -80,9 +81,11 @@ func NewAppStore(args Args) AppStore {
 		Executor:  backend.Client("request"),
 	}
 
-	actionSignerFactory := args.ActionSignerFactory
-	if actionSignerFactory == nil {
-		actionSignerFactory = frameworkActionSignerFactory(backend.Client("api"))
+	actionSignerFactory := frameworkActionSignerFactory(backend.Client("api"))
+	if args.ActionSignerFactory != nil {
+		actionSignerFactory = func(_ context.Context, config SAPConfig, machineID []byte) (ActionSigner, error) {
+			return args.ActionSignerFactory(config, machineID)
+		}
 	}
 
 	return &appstore{

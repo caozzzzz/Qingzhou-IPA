@@ -1,5 +1,6 @@
 #include <stdint.h>
 int QZSetCacheDirectory(char *path);
+void QZSetSAPImportDirectory(char *path);
 uint64_t QZCreate(void);
 char *QZCall(uint64_t handle, char *input);
 char *QZPoll(uint64_t handle);

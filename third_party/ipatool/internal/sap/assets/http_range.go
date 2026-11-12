@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const remoteReadAttempts = 3
+const (
+	remoteReadAttempts = 3
+	maxRemoteRange     = 1 << 20
+)
 
 type remoteFile struct {
 	ctx    context.Context
@@ -27,6 +30,7 @@ func openRemoteFile(ctx context.Context, client *http.Client) (*remoteFile, erro
 	}
 
 	request.Header.Set("Range", "bytes=0-0")
+	request.Header.Set("Accept-Encoding", "identity")
 	response, err := client.Do(request)
 
 	if err != nil {
@@ -45,6 +49,10 @@ func openRemoteFile(ctx context.Context, client *http.Client) (*remoteFile, erro
 	}
 	if start != 0 || end != 0 {
 		return nil, fmt.Errorf("open remote image: server returned unexpected byte range %d-%d", start, end)
+	}
+	var firstByte [1]byte
+	if _, err := io.ReadFull(response.Body, firstByte[:]); err != nil {
+		return nil, fmt.Errorf("read remote image probe: %w", err)
 	}
 
 	return &remoteFile{ctx: ctx, client: client, url: macOSRestoreURL, size: size}, nil
@@ -97,11 +105,30 @@ func (r *remoteFile) ReadAt(data []byte, offset int64) (int, error) {
 		wanted = int(remaining)
 	}
 
+	for total := 0; total < wanted; {
+		end := min(total+maxRemoteRange, wanted)
+		n, err := r.readRange(data[total:end], offset+int64(total))
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	if wanted != len(data) {
+		return wanted, io.EOF
+	}
+	return wanted, nil
+}
+
+func (r *remoteFile) readRange(data []byte, offset int64) (int, error) {
+	wanted := len(data)
 	total := 0
 
 	var lastErr error
 
 	for attempt := 0; attempt < remoteReadAttempts && total < wanted; attempt++ {
+		if err := r.ctx.Err(); err != nil {
+			return total, err
+		}
 		start := offset + int64(total)
 		end := offset + int64(wanted) - 1
 
@@ -111,6 +138,7 @@ func (r *remoteFile) ReadAt(data []byte, offset int64) (int, error) {
 		}
 
 		request.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+		request.Header.Set("Accept-Encoding", "identity")
 		response, err := r.client.Do(request)
 		if err != nil {
 			lastErr = err
@@ -121,7 +149,13 @@ func (r *remoteFile) ReadAt(data []byte, offset int64) (int, error) {
 		if response.StatusCode != http.StatusPartialContent {
 			response.Body.Close()
 
-			return total, fmt.Errorf("read remote image range: server returned %s", response.Status)
+			lastErr = fmt.Errorf("read remote image range: server returned %s", response.Status)
+			switch response.StatusCode {
+			case http.StatusRequestTimeout, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+				continue
+			default:
+				return total, lastErr
+			}
 		}
 		actualStart, actualEnd, actualSize, err := parseContentRange(response.Header.Get("Content-Range"))
 
@@ -135,12 +169,10 @@ func (r *remoteFile) ReadAt(data []byte, offset int64) (int, error) {
 		}
 
 		count, readErr := io.ReadFull(response.Body, data[total:wanted])
-		closeErr := response.Body.Close()
+		_ = response.Body.Close()
 		total += count
 
 		if readErr == nil {
-			lastErr = closeErr
-
 			break
 		}
 
@@ -153,10 +185,6 @@ func (r *remoteFile) ReadAt(data []byte, offset int64) (int, error) {
 		}
 
 		return total, fmt.Errorf("read remote image at offset %d: %w", offset+int64(total), lastErr)
-	}
-
-	if wanted != len(data) {
-		return total, io.EOF
 	}
 
 	return total, nil

@@ -76,7 +76,17 @@ func Load(ctx context.Context) (Bundle, error) {
 		return bundle, nil
 	}
 
-	bundle, err := resolveRemoteImage(ctx)
+	var bundle Bundle
+	imported := false
+	if runtime.GOOS == "ios" {
+		bundle, imported, err = readImport(os.Getenv("QINGZHOU_SAP_IMPORT_DIR"))
+		if err != nil {
+			return Bundle{}, fmt.Errorf("import Apple SAP assets: %w", err)
+		}
+	}
+	if !imported {
+		bundle, err = resolveRemoteImage(ctx)
+	}
 	if err != nil {
 		return Bundle{}, err
 	}
@@ -86,6 +96,19 @@ func Load(ctx context.Context) (Bundle, error) {
 	}
 
 	return bundle, nil
+}
+
+func readImport(directory string) (Bundle, bool, error) {
+	if !filepath.IsAbs(directory) {
+		return Bundle{}, false, nil
+	}
+	if _, err := os.Stat(directory); errors.Is(err, fs.ErrNotExist) {
+		return Bundle{}, false, nil
+	} else if err != nil {
+		return Bundle{}, false, err
+	}
+	bundle, err := readCache(directory)
+	return bundle, err == nil, err
 }
 
 func cacheDirectory() (string, error) {

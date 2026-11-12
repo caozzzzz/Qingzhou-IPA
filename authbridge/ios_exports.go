@@ -43,6 +43,14 @@ func QZSetCacheDirectory(path *C.char) C.int {
 	return 1
 }
 
+//export QZSetSAPImportDirectory
+func QZSetSAPImportDirectory(path *C.char) {
+	root := C.GoString(path)
+	if filepath.IsAbs(root) {
+		_ = os.Setenv("QINGZHOU_SAP_IMPORT_DIR", root)
+	}
+}
+
 //export QZCreate
 func QZCreate() C.ulonglong {
 	c := &iosClient{}

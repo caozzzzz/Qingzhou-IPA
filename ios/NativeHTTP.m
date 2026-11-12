@@ -13,6 +13,38 @@
 }
 @end
 
+// Use delegate delivery for restore-image ranges: cancel at the headers if
+// a server ignores Range, and never accumulate more than one small chunk.
+@interface QZResourceSessionDelegate : QZAuthSessionDelegate <NSURLSessionDataDelegate>
+@property(nonatomic) NSUInteger limit;
+@property(nonatomic) BOOL requiresRange;
+@property(nonatomic, strong) NSMutableData *data;
+@property(nonatomic, copy) void (^completion)(NSData *, NSURLResponse *, NSError *);
+@end
+@implementation QZResourceSessionDelegate
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task
+ didReceiveResponse:(NSURLResponse *)response completionHandler:(void (^)(NSURLSessionResponseDisposition))handler {
+    if (![response isKindOfClass:NSHTTPURLResponse.class]) {
+        handler(NSURLSessionResponseCancel);
+        return;
+    }
+    NSInteger status = ((NSHTTPURLResponse *)response).statusCode;
+    BOOL ignoredRange = self.requiresRange && status >= 200 && status < 300 && status != 206;
+    handler(ignoredRange || response.expectedContentLength > (long long)self.limit
+        ? NSURLSessionResponseCancel : NSURLSessionResponseAllow);
+}
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task didReceiveData:(NSData *)data {
+    if (data.length > self.limit - self.data.length) {
+        [task cancel];
+        return;
+    }
+    [self.data appendData:data];
+}
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+    self.completion(self.data, task.response, error);
+}
+@end
+
 // Called only on Go's background worker. No credentials, URLs or response
 // bodies are logged or persisted. The caller owns the returned malloc buffer.
 char *QZNativeHTTP(const char *requestJSON) {
@@ -36,12 +68,11 @@ char *QZNativeHTTP(const char *requestJSON) {
         config.HTTPCookieStorage = nil; config.HTTPShouldSetCookies = NO;
         config.URLCache = nil; config.URLCredentialStorage = nil;
         config.timeoutIntervalForRequest = timeout; config.timeoutIntervalForResource = timeout;
-        QZAuthSessionDelegate *delegate = [QZAuthSessionDelegate new];
-        NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:delegate delegateQueue:nil];
+        BOOL publicResource = [values[@"publicResource"] boolValue];
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
         NSLock *lock = [NSLock new];
         __block NSDictionary *result;
-        NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        void (^completion)(NSData *, NSURLResponse *, NSError *) = ^(NSData *data, NSURLResponse *response, NSError *error) {
             NSDictionary *completed;
             if (error || ![response isKindOfClass:NSHTTPURLResponse.class]) {
                 completed = @{@"errorCode": @(error ? error.code : -1011)};
@@ -63,7 +94,21 @@ char *QZNativeHTTP(const char *requestJSON) {
             }
             [lock lock]; result = completed; [lock unlock];
             dispatch_semaphore_signal(done);
-        }];
+        };
+        QZAuthSessionDelegate *delegate;
+        if (publicResource) {
+            QZResourceSessionDelegate *resource = [QZResourceSessionDelegate new];
+            resource.requiresRange = [request valueForHTTPHeaderField:@"Range"].length > 0;
+            resource.limit = resource.requiresRange ? 1024 * 1024 : 64 * 1024;
+            resource.data = [NSMutableData new];
+            resource.completion = completion;
+            delegate = resource;
+        } else {
+            delegate = [QZAuthSessionDelegate new];
+        }
+        NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:delegate delegateQueue:nil];
+        NSURLSessionDataTask *task = publicResource ? [session dataTaskWithRequest:request]
+            : [session dataTaskWithRequest:request completionHandler:completion];
         [task resume];
         long timedOut = dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 2) * NSEC_PER_SEC)));
         if (timedOut) [task cancel];

@@ -6,6 +6,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def do_GET(self):
         calls.append((self.path,b"",None,None,self.command))
+        if self.path in ("/asset", "/ignores-range", "/huge"):
+            assert self.headers.get("Range")=="bytes=0-2"
+            self.send_response(200 if self.path=="/ignores-range" else 206)
+            self.send_header("Content-Range","bytes 0-2/42")
+            self.send_header("Content-Length","9000000000" if self.path!="/asset" else "3")
+            self.end_headers()
+            if self.path=="/asset": self.wfile.write(b"abc")
+            return
         body=b'{"trustedPhoneNumbers":[]}'
         self.send_response(200)
         self.send_header("Content-Type","application/json")
@@ -34,9 +42,9 @@ threading.Thread(target=server.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory() as temp:
     temp=pathlib.Path(temp);binary=temp/"native-http-test"
     subprocess.run(["clang","-fobjc-arc","-framework","Foundation",str(root/"ios/NativeHTTP.m"),str(root/"ios/tests/NativeHTTPHarness.m"),"-o",str(binary)],check=True)
-    def run(path,headers=None,url=None,method="POST"):
+    def run(path,headers=None,url=None,method="POST",public_resource=False):
         body=b"" if method=="GET" else b"fixture-only-body"
-        payload={"url":url or f"http://127.0.0.1:{server.server_port}{path}","method":method,"headers":headers or {"X-Apple-ActionSignature":["fixture-signature"]},"body":base64.b64encode(body).decode(),"timeout":5}
+        payload={"url":url or f"http://127.0.0.1:{server.server_port}{path}","method":method,"headers":headers or {"X-Apple-ActionSignature":["fixture-signature"]},"body":base64.b64encode(body).decode(),"timeout":5,"publicResource":public_resource}
         completed=subprocess.run([str(binary)],input=json.dumps(payload),text=True,capture_output=True,check=True,timeout=15)
         return json.loads(completed.stdout)
     result=run("/redirect");assert result["status"]==302
@@ -52,6 +60,11 @@ with tempfile.TemporaryDirectory() as temp:
     run("/echo");assert calls[-1][3] is None
     result=run("/gzip");assert result["status"]==200 and base64.b64decode(result["body"])==b"fixture-only-body"
     result=run("/auth",method="GET");assert result["status"]==200 and calls[-1][4]=="GET"
+    result=run("/asset",{"Range":["bytes=0-2"]},method="GET",public_resource=True)
+    assert result["status"]==206 and base64.b64decode(result["body"])==b"abc"
+    for path in ("/ignores-range", "/huge"):
+        result=run(path,{"Range":["bytes=0-2"]},method="GET",public_resource=True)
+        assert result.get("errorCode",0)!=0 and "status" not in result
     result=run("/auth/verify/phone",method="PUT");assert result["status"]==200 and calls[-1][4]=="PUT" and calls[-1][1]==b"fixture-only-body"
     # An untrusted TLS peer must fail; no trust callback/bypass is installed.
     key=temp/"key.pem";cert=temp/"cert.pem"

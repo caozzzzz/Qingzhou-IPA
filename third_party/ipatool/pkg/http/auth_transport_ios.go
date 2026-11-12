@@ -15,7 +15,16 @@ import (
 	"unsafe"
 )
 
-type nativeAuthTransport struct{ fallback http.RoundTripper }
+type nativeAuthTransport struct {
+	fallback       http.RoundTripper
+	publicResource bool
+}
+
+// PublicAppleResourceRoundTripper uses URLSession without the login transport
+// preference. Its caller restricts destinations to public Apple asset hosts.
+func PublicAppleResourceRoundTripper() http.RoundTripper {
+	return nativeAuthTransport{publicResource: true}
+}
 
 func AuthenticationRoundTripper(fallback http.RoundTripper) http.RoundTripper {
 	return nativeAuthTransport{fallback: fallback}
@@ -53,12 +62,13 @@ func (t nativeAuthTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, errors.New("native authentication request deadline exceeded")
 	}
 	encoded, err := json.Marshal(struct {
-		URL     string      `json:"url"`
-		Method  string      `json:"method"`
-		Headers http.Header `json:"headers"`
-		Body    []byte      `json:"body"`
-		Timeout float64     `json:"timeout"`
-	}{req.URL.String(), req.Method, req.Header, body, timeout.Seconds()})
+		URL            string      `json:"url"`
+		Method         string      `json:"method"`
+		Headers        http.Header `json:"headers"`
+		Body           []byte      `json:"body"`
+		Timeout        float64     `json:"timeout"`
+		PublicResource bool        `json:"publicResource,omitempty"`
+	}{req.URL.String(), req.Method, req.Header, body, timeout.Seconds(), t.publicResource})
 	if err != nil {
 		return nil, err
 	}

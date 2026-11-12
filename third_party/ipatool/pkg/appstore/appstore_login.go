@@ -35,6 +35,8 @@ type LoginInput struct {
 	Email    string
 	Password string
 	AuthCode string
+	// Context controls SAP preparation, including cold component downloads.
+	Context context.Context
 	// Endpoint is deprecated. Login always uses the SAP configuration from
 	// Apple's current bag so unsigned or caller-selected fallbacks are impossible.
 	Endpoint string
@@ -69,7 +71,11 @@ func (t *appstore) Login(input LoginInput) (LoginOutput, error) {
 		return LoginOutput{}, errors.New("SAP action signer is not configured")
 	}
 
-	signer, err := t.actionSignerFactory(bag.SAPConfig, machineID)
+	ctx := input.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	signer, err := t.actionSignerFactory(ctx, bag.SAPConfig, machineID)
 	if err != nil {
 		return LoginOutput{}, fmt.Errorf("failed to initialize SAP action signer: %w", err)
 	}

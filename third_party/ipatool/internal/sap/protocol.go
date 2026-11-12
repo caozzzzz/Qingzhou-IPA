@@ -38,7 +38,11 @@ func (p setupProtocol) certificate(ctx context.Context, endpoint string) ([]byte
 		return nil, fmt.Errorf("fetch SAP certificate: %w", err)
 	}
 
-	return plistBytes(body, setupCertificateKey)
+	certificate, err := plistBytes(body, setupCertificateKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode SAP certificate: %w", err)
+	}
+	return certificate, nil
 }
 
 func (p setupProtocol) exchange(ctx context.Context, endpoint string, input []byte) ([]byte, error) {
@@ -60,7 +64,11 @@ func (p setupProtocol) exchange(ctx context.Context, endpoint string, input []by
 		return nil, fmt.Errorf("exchange SAP setup message: %w", err)
 	}
 
-	return plistBytes(body, setupBufferKey)
+	reply, err := plistBytes(body, setupBufferKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode SAP setup reply: %w", err)
+	}
+	return reply, nil
 }
 
 func (p setupProtocol) send(request *http.Request) ([]byte, error) {

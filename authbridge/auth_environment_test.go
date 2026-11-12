@@ -59,6 +59,24 @@ func TestAuthenticationEOFIdentifiesPhaseWithoutPrivateDetails(t *testing.T) {
 	}
 }
 
+func TestSAPSetupIdentifiesComponentNetworkFailureBeforeGenericTransport(t *testing.T) {
+	for prefix, phase := range map[string]string{
+		"load Apple SAP assets: open remote image":      "SAP_ASSET_CDN",
+		"load Apple SAP assets: download Apple FCS key": "SAP_ASSET_KEY",
+	} {
+		err := fmt.Errorf("failed to initialize SAP action signer: %s: private-host: %w", prefix,
+			errors.Join(io.EOF, &storehttp.NativeAuthenticationNetworkError{Code: -1005}))
+		code, message := authenticationError(err)
+		if code != "auth_assets" || !strings.Contains(message, phase+"；URLSession -1005") || strings.Contains(message, "private-") {
+			t.Fatalf("unexpected component error %s: %s", code, message)
+		}
+	}
+	err := fmt.Errorf("failed to initialize SAP action signer: decode SAP certificate: %w", io.EOF)
+	if code, message := authenticationError(err); code != "auth_transport" || !strings.Contains(message, "SAP_CERT；EOF") {
+		t.Fatalf("unexpected certificate error %s: %s", code, message)
+	}
+}
+
 func TestAuthenticationBagReportsBothChannelsWithoutURLs(t *testing.T) {
 	err := &storehttp.AuthenticationBagError{Attempts: []storehttp.AuthenticationBagAttempt{
 		{Transport: storehttp.AuthenticationTransportGo, Stage: "SEND", Cause: fmt.Errorf("private endpoint: %w", io.EOF)},

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -29,7 +30,10 @@ var frameworkImagePaths = []string{
 }
 
 func resolveRemoteImage(ctx context.Context) (Bundle, error) {
-	client := &http.Client{}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	client := newRemoteAssetClient()
+	defer client.CloseIdleConnections()
 	remote, err := openRemoteFile(ctx, client)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("resolve macOS %s (%s) frameworks: %w", macOSVersion, macOSBuild, err)

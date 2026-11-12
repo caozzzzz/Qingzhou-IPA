@@ -254,7 +254,7 @@ func authenticationPhase(err error) string {
 	switch {
 	case strings.Contains(message, "failed to get bag"):
 		return "BAG"
-	case strings.Contains(message, "exchange sap setup message"):
+	case strings.Contains(message, "exchange sap setup message"), strings.Contains(message, "decode sap setup reply"):
 		return "SAP_EXCHANGE"
 	case strings.Contains(message, "sap certificate"), strings.Contains(message, "sap setup certificate"):
 		return "SAP_CERT"
@@ -295,6 +295,25 @@ func authenticationNetworkReason(err error) string {
 // Never return upstream response metadata, request bodies, cookies or tokens as errors.
 func authenticationError(err error) (string, string) {
 	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "load apple sap assets") {
+		stage := "SAP_ASSETS"
+		switch {
+		case strings.Contains(message, "cache apple sap assets"), strings.Contains(message, "find user cache directory"):
+			return "auth_cache", "无法保存认证组件，请检查应用缓存目录和可用空间（CACHE）。"
+		case strings.Contains(message, "import apple sap assets"):
+			return "auth_assets", "导入的认证组件缺少文件或校验失败，请检查 SAP-Components 文件夹（SAP_IMPORT）。"
+		case strings.Contains(message, "apple fcs key"):
+			stage = "SAP_ASSET_KEY"
+		case strings.Contains(message, "remote image"), strings.Contains(message, "remote range"):
+			stage = "SAP_ASSET_CDN"
+		}
+		reason := authenticationNetworkReason(err)
+		detail := stage
+		if reason != "NETWORK" {
+			detail += "；" + reason
+		}
+		return "auth_assets", "无法准备 Apple 签名组件（" + detail + "）。请检查网络，也可以从本机 Windows 缓存导入组件。"
+	}
 	var bagError *storehttp.AuthenticationBagError
 	if errors.As(err, &bagError) {
 		attempts := make([]string, 0, len(bagError.Attempts))
@@ -351,7 +370,7 @@ func authenticationError(err error) (string, string) {
 	var failure *appstore.AuthenticationFailure
 	var transportError *storehttp.TransportError
 	phase, reason := authenticationPhase(err), authenticationNetworkReason(err)
-	if errors.As(err, &transportError) || (strings.HasPrefix(phase, "SAP_") && reason != "NETWORK") {
+	if errors.As(err, &transportError) || phase == "SAP_CERT" || phase == "SAP_EXCHANGE" || (phase == "SAP_SETUP" && reason != "NETWORK") {
 		return "auth_transport", fmt.Sprintf("Apple 登录请求未完成（%s；%s）。%s", phase, reason, authenticationContext(err))
 	}
 	if errors.As(err, &failure) {
@@ -477,7 +496,7 @@ func (b *bridge) handle(in request) response {
 		}
 		storehttp.SetAuthenticationTransport(in.Transport)
 		appstore.SetAuthenticationPathMode(in.PathMode)
-		result, err := b.store.Login(appstore.LoginInput{Email: strings.TrimSpace(in.Email), Password: in.Password, AuthCode: in.Code})
+		result, err := b.store.Login(appstore.LoginInput{Email: strings.TrimSpace(in.Email), Password: in.Password, AuthCode: in.Code, Context: in.operationContext()})
 		in.Password = ""
 		if in.operationContext().Err() != nil {
 			_ = b.keychain.Remove("account")

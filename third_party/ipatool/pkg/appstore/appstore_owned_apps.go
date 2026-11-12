@@ -1,6 +1,7 @@
 package appstore
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -63,7 +64,7 @@ func (t *appstore) OwnedApps(input OwnedAppsInput) (OwnedAppsOutput, error) {
 		return OwnedAppsOutput{}, errors.New("SAP action signer is not configured")
 	}
 
-	signer, err := t.actionSignerFactory(bag.SAPConfig, machineID)
+	signer, err := t.actionSignerFactory(context.Background(), bag.SAPConfig, machineID)
 	if err != nil {
 		return OwnedAppsOutput{}, fmt.Errorf("failed to initialize SAP action signer: %w", err)
 	}
